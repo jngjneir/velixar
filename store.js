@@ -42,6 +42,7 @@ try { db.exec(`ALTER TABLE nexus_config ADD COLUMN modlog_space TEXT`); } catch 
 try { db.exec(`ALTER TABLE nexus_config ADD COLUMN automod_banned TEXT`); } catch { /* already exists */ }
 try { db.exec(`ALTER TABLE nexus_config ADD COLUMN automod_flags TEXT`); } catch { /* already exists */ }
 try { db.exec(`ALTER TABLE nexus_config ADD COLUMN reaction_roles TEXT`); } catch { /* already exists */ }
+try { db.exec(`ALTER TABLE nexus_config ADD COLUMN prefix TEXT`); } catch { /* already exists */ }
 
 // Extra feature tables. Each is keyed by nexus_id so one Aero serves many.
 db.exec(`
@@ -151,6 +152,7 @@ const DEFAULT_CONFIG = {
   automod_banned: [],                                    // banned words
   automod_flags: { spam: false, caps: false, maxMentions: 0, action: 'warn', deleteMsg: true },
   reaction_roles: [],                                    // [{ label, emoji, role_id }]
+  prefix: '!',                                           // the "!command" prefix, per-Nexus
 };
 
 const getRow = db.prepare('SELECT * FROM nexus_config WHERE nexus_id = ?');
@@ -173,18 +175,19 @@ export function getConfig(nexusId) {
     automod_banned: safeParse(row.automod_banned, DEFAULT_CONFIG.automod_banned),
     automod_flags: safeParse(row.automod_flags, DEFAULT_CONFIG.automod_flags),
     reaction_roles: safeParse(row.reaction_roles, DEFAULT_CONFIG.reaction_roles),
+    prefix: row.prefix || DEFAULT_CONFIG.prefix,
   };
 }
 
 const upsert = db.prepare(`
-  INSERT INTO nexus_config (nexus_id, welcome_space, ticket_title, ticket_desc, ticket_button, ticket_color, ticket_staff_role, ticket_categories, ticket_category_id, self_roles, suggestions_space, modlog_space, automod_banned, automod_flags, reaction_roles, updated_at)
-  VALUES (@nexus_id, @welcome_space, @ticket_title, @ticket_desc, @ticket_button, @ticket_color, @ticket_staff_role, @ticket_categories, @ticket_category_id, @self_roles, @suggestions_space, @modlog_space, @automod_banned, @automod_flags, @reaction_roles, @updated_at)
+  INSERT INTO nexus_config (nexus_id, welcome_space, ticket_title, ticket_desc, ticket_button, ticket_color, ticket_staff_role, ticket_categories, ticket_category_id, self_roles, suggestions_space, modlog_space, automod_banned, automod_flags, reaction_roles, prefix, updated_at)
+  VALUES (@nexus_id, @welcome_space, @ticket_title, @ticket_desc, @ticket_button, @ticket_color, @ticket_staff_role, @ticket_categories, @ticket_category_id, @self_roles, @suggestions_space, @modlog_space, @automod_banned, @automod_flags, @reaction_roles, @prefix, @updated_at)
   ON CONFLICT(nexus_id) DO UPDATE SET
     welcome_space=excluded.welcome_space, ticket_title=excluded.ticket_title, ticket_desc=excluded.ticket_desc,
     ticket_button=excluded.ticket_button, ticket_color=excluded.ticket_color, ticket_staff_role=excluded.ticket_staff_role,
     ticket_categories=excluded.ticket_categories, ticket_category_id=excluded.ticket_category_id, self_roles=excluded.self_roles,
     suggestions_space=excluded.suggestions_space, modlog_space=excluded.modlog_space, automod_banned=excluded.automod_banned,
-    automod_flags=excluded.automod_flags, reaction_roles=excluded.reaction_roles, updated_at=excluded.updated_at
+    automod_flags=excluded.automod_flags, reaction_roles=excluded.reaction_roles, prefix=excluded.prefix, updated_at=excluded.updated_at
 `);
 
 // Merge a patch into a Nexus's config and persist it.
@@ -207,6 +210,7 @@ export function setConfig(nexusId, patch) {
     automod_banned: JSON.stringify(next.automod_banned || []),
     automod_flags: JSON.stringify(next.automod_flags || DEFAULT_CONFIG.automod_flags),
     reaction_roles: JSON.stringify(next.reaction_roles || []),
+    prefix: next.prefix || DEFAULT_CONFIG.prefix,
     updated_at: Date.now(),
   });
   return next;

@@ -259,6 +259,12 @@ aero.on('message.created', async (ev) => {
   const space = ev.data?.message?.space_id || ev.space_id;
   const content = ev.data?.message?.content ?? ev.data?.message?.text ?? '';
 
+  // Per-Nexus "!command" prefix dispatch (the prefix is configurable with
+  // /prefix). Runs first so a prefix command is handled and the rest of the
+  // handler (AFK/veli/counting) still gets a chance too — dispatchPrefix only
+  // acts when the message actually starts with this Nexus's prefix.
+  dispatchPrefix(ev).catch(() => {});
+
   // ── AFK: clear the sender's AFK, and flag any AFK member they mention ──
   if (on(ev.nexus_id, 'afk')) {
     if (store.getAfk(ev.nexus_id, uid)) {
@@ -3685,6 +3691,7 @@ const HELP_CATEGORIES = [
     ['base64', 'Encode base64'], ['base64decode', 'Decode base64'], ['binary', 'Text to binary'], ['leet', 'Leetspeak'], ['clapify', 'Clap 👏 between'],
     ['vaporwave', 'Ａｅｓｔｈｅｔｉｃ'], ['password', 'Strong password'], ['randomcolor', 'Random colour'], ['countdown', 'Live countdown'], ['remind', 'Set a reminder'],
     ['remindlist', 'Your reminders'], ['remindme', 'Set a reminder'], ['afk', 'Go AFK'], ['tag', 'Post a tag'], ['tag-list', 'List tags'],
+    ['prefix', 'Set the ! prefix (admin)'],
   ] },
   { key: 'community', emoji: '🏛️', label: 'Community', desc: 'Tickets, suggestions, giveaways', cmds: [
     ['panel', 'Ticket panel'], ['ticket-list', 'Open tickets'], ['suggest', 'Submit a suggestion'], ['suggestions-list', 'Suggestions info'], ['giveaway', 'Start a giveaway'],
@@ -3748,9 +3755,13 @@ aero.component('help:cat', (i) => i.update(helpCategory(i.values?.[0])));
 // ─────────────────────────────────────────────────────────────
 const pOn = (ctx, key) => aero.moduleEnabled(ctx.nexus_id, key);
 // Resolve the first <@id> mention in the args to a target user id.
-const pMention = (ctx) => { const m = (ctx.text || '').match(/<@!?(\d+)>/); return m ? m[1] : null; };
+const pMention = (ctx) => { const m = (ctx.text || '').match(/<@!?([a-zA-Z0-9_-]+)>/); return m ? m[1] : null; };
 
-aero.prefix('!');
+// The prefix is PER-NEXUS (a Nexus admin sets it with /prefix), so we don't use
+// the SDK's single global prefix. prefixCommand() still registers handlers into
+// aero._prefixHandlers; our own message.created dispatch (below, in the main
+// handler) reads the Nexus's configured prefix and routes to those handlers.
+const prefixOf = (nexusId) => (cfg(nexusId).prefix || '!');
 
 aero.prefixCommand('ping', (ctx) => ctx.reply(say('🏓 Pong', 'Velixar is online and responding.', OK)));
 aero.prefixCommand('help', (ctx) => ctx.reply(helpLanding()));
@@ -3836,8 +3847,56 @@ for (const [name, emoji, verb] of [['hug', '🤗', 'hug'], ['pat', '👋', 'pat'
   });
 }
 
-// A friendly catch-all so "!something" that isn't a command nudges to !help.
-aero.prefixCommand('*', (ctx) => ctx.reply(say('Unknown command', `\`!${ctx.command}\` isn't a Velixar prefix command. Try \`!help\` or use \`/${ctx.command}\`.`, WARN_C)));
+// A friendly catch-all so an unknown prefix command nudges to help.
+aero.prefixCommand('*', (ctx) => {
+  const px = prefixOf(ctx.nexus_id);
+  return ctx.reply(say('Unknown command', `\`${px}${ctx.command}\` isn't a Velixar prefix command. Try \`${px}help\` or use \`/${ctx.command}\`.`, WARN_C));
+});
+
+// Per-Nexus prefix dispatch. Reads the Nexus's configured prefix, parses the
+// command + args, and calls the matching handler registered via prefixCommand()
+// with the same ctx shape the SDK provides ({ command, args, text, invoker,
+// nexus_id, space_id, reply, replyEphemeral }). Called from message.created.
+async function dispatchPrefix(ev) {
+  const m = ev?.data?.message;
+  const text = m?.text ?? m?.content ?? '';
+  if (!text || m?.is_aero) return;
+  const px = prefixOf(ev.nexus_id);
+  if (!text.startsWith(px)) return;
+  const rest = text.slice(px.length).trim();
+  if (!rest) return;
+  const parts = rest.split(/\s+/);
+  const command = parts[0].toLowerCase();
+  const args = parts.slice(1);
+  const fn = aero._prefixHandlers?.get(command) || aero._prefixHandlers?.get('*');
+  if (!fn) return;
+  const runner = { id: m.sender_id, name: m.sender_name };
+  const ctx = {
+    command, args, text,
+    space_id: m.space_id, nexus_id: ev.nexus_id,
+    sender_id: m.sender_id, sender_name: m.sender_name,
+    invoker: runner, author: runner, message_id: m.id,
+    reply: (message) => aero.sendMessage(ev.nexus_id, m.space_id, message),
+    replyEphemeral: (message) => {
+      const body = typeof message === 'string' ? { text: message } : (message || {});
+      return aero.respondInteraction(ev.nexus_id, { ...body, mode: 'ephemeral', target_user_id: m.sender_id, space_id: m.space_id });
+    },
+  };
+  try { await fn(ctx); } catch (e) { console.error('[velixar] prefix error:', e.message); }
+}
+
+// /prefix — a Nexus admin views or changes the "!command" prefix.
+aero.command('prefix', (i) => {
+  const cur = prefixOf(i.nexus_id);
+  const val = (i.options?.text ?? '').toString().trim();
+  if (!val) {
+    return i.replyEphemeral(say('⚙️ Prefix', `The current prefix is \`${cur}\`. Change it with \`/prefix <symbol>\` (admins only), e.g. \`/prefix ?\`.`));
+  }
+  // Keep it short + symbol-ish so it can't collide with normal chat.
+  if (val.length > 3) return i.replyEphemeral('A prefix must be 1 to 3 characters, e.g. `!`, `?`, `>>`.');
+  store.setConfig(i.nexus_id, { prefix: val });
+  return i.replyEphemeral(say('✅ Prefix updated', `Velixar now responds to \`${val}command\` in this Nexus (for example \`${val}ping\`). Slash commands still work too.`, OK));
+});
 
 // Recover after a restart: re-arm timers for giveaways that were still running.
 // (Reminders are swept by the interval above, so they need no re-arming.)

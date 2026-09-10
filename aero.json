@@ -1637,6 +1637,19 @@
     {
       "name": "remindme",
       "description": "Set a personal reminder."
+    },
+    {
+      "name": "prefix",
+      "description": "View or change the ! prefix (admin).",
+      "required_permission": "manage_nexus",
+      "options": [
+        {
+          "name": "symbol",
+          "type": "string",
+          "required": false,
+          "description": "New prefix, e.g. ? or >>"
+        }
+      ]
     }
   ]
 }
