@@ -381,13 +381,17 @@ aero.command('rank', (i) => {
   const points = store.getXp(i.nexus_id, target);
   const lvl = levelFor(points);
   const p = progressBar(points);
-  const body = {
-    embeds: [{
-      title: `${self ? i.invoker.name : 'Member'} · level ${lvl}`,
-      description: `${self ? '' : `<@${target}>\n`}**${points} XP** total\n\n\`${p.bar}\`  ${p.have}/${p.need} to level ${lvl + 1}`,
-      color: OK,
-    }],
-  };
+  const body = rich({
+    title: `📊 ${self ? i.invoker.name : 'Member'}`,
+    description: `${self ? '' : `<@${target}>\n\n`}\`${p.bar}\`  **${p.have}/${p.need}** XP to level ${lvl + 1}`,
+    color: OK,
+    fields: [
+      { name: 'Level', value: `**${lvl}**`, inline: true },
+      { name: 'Total XP', value: `**${points.toLocaleString()}**`, inline: true },
+      { name: 'To next', value: `${(p.need - p.have).toLocaleString()} XP`, inline: true },
+    ],
+    footer: 'Velixar · chat to earn XP',
+  });
   // Your own rank stays private; someone else's is a normal reply.
   return self ? i.replyEphemeral(body) : i.reply(body);
 });
@@ -1641,7 +1645,19 @@ const fmtCoins = (n) => `${COIN} **${n.toLocaleString()}**`;
 
 aero.command('balance', (i) => {
   if (!ecoGate(i)) return i.replyEphemeral('The Economy module is off in this Nexus.');
-  return i.replyEphemeral(say('Your wallet', `You have ${fmtCoins(store.getCoins(i.nexus_id, i.invoker.id).balance)}.`, OK));
+  const c = store.getCoins(i.nexus_id, i.invoker.id);
+  const net = (c.balance || 0) + (c.bank || 0);
+  return i.replyEphemeral(rich({
+    title: '💰 Your wallet',
+    description: `You're carrying ${fmtCoins(c.balance || 0)}.`,
+    color: OK,
+    fields: [
+      { name: 'Wallet', value: fmtCoins(c.balance || 0), inline: true },
+      { name: 'Bank', value: fmtCoins(c.bank || 0), inline: true },
+      { name: 'Net worth', value: fmtCoins(net), inline: true },
+    ],
+    footer: 'Velixar · use /deposit and /withdraw',
+  }));
 });
 
 const WORK_COOLDOWN = 60 * 60 * 1000; // 1 hour
@@ -1657,7 +1673,14 @@ aero.command('work', (i) => {
   const earned = 50 + Math.floor(Math.random() * 150);
   store.addCoins(i.nexus_id, i.invoker.id, earned);
   store.markWork(i.nexus_id, i.invoker.id, Date.now());
-  return i.reply(say('💼 Work', `${WORK_LINES[Math.floor(Math.random() * WORK_LINES.length)]} and earned ${fmtCoins(earned)}.`, OK));
+  const bal = store.getCoins(i.nexus_id, i.invoker.id).balance;
+  return i.reply(rich({
+    title: '💼 Work',
+    description: `${WORK_LINES[Math.floor(Math.random() * WORK_LINES.length)]} and earned ${fmtCoins(earned)}.`,
+    color: OK,
+    fields: [{ name: 'New balance', value: fmtCoins(bal), inline: true }],
+    footer: 'Velixar',
+  }));
 });
 
 aero.command('daily-coins', (i) => {
@@ -1673,7 +1696,18 @@ aero.command('daily-coins', (i) => {
   const reward = 100 + Math.min(streak, 30) * 20;
   store.setDaily(i.nexus_id, i.invoker.id, now, streak);
   store.addCoins(i.nexus_id, i.invoker.id, reward);
-  return i.reply(say('🎁 Daily coins', `+${fmtCoins(reward)} · 🔥 **${streak}-day** streak.`, OK));
+  const bal = store.getCoins(i.nexus_id, i.invoker.id).balance;
+  return i.reply(rich({
+    title: '🎁 Daily coins',
+    description: `You claimed today's reward.`,
+    color: OK,
+    fields: [
+      { name: 'Earned', value: fmtCoins(reward), inline: true },
+      { name: 'Streak', value: `🔥 ${streak}-day`, inline: true },
+      { name: 'Balance', value: fmtCoins(bal), inline: true },
+    ],
+    footer: 'Velixar · come back tomorrow',
+  }));
 });
 
 aero.command('rich', (i) => {
@@ -1777,8 +1811,8 @@ const SHOP = [
 ];
 aero.command('shop', (i) => {
   if (!ecoGate(i)) return i.replyEphemeral('The Economy module is off in this Nexus.');
-  const body = SHOP.map((s) => `${s.emoji} **${s.name}**. ${fmtCoins(s.price)}\n${s.desc}`).join('\n\n');
-  return i.reply({ embeds: [{ title: '🛒 Shop', description: `${body}\n\nBuy with \`/buy <item>\`.`, color: BRAND, footer: { text: `Your balance: ${store.getCoins(i.nexus_id, i.invoker.id).balance} coins` } }] });
+  const body = SHOP.map((s) => `${s.emoji} **${s.name}**  ·  ${fmtCoins(s.price)}\n${s.desc}`).join('\n\n');
+  return i.reply({ embeds: [{ title: '🛒 Shop', description: `${body}\n\nBuy with \`/buy\` and the item name.`, color: BRAND, footer: { text: `Your balance: ${store.getCoins(i.nexus_id, i.invoker.id).balance} coins` } }] });
 });
 const doBuy = (i, raw) => {
   const key = (raw || '').trim().toLowerCase();
