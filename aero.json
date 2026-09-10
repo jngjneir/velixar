@@ -2,6 +2,7 @@
   "name": "Velixar",
   "description": "The all-in-one Aero for your Nexus: levels with role rewards, moderation, tickets, self-roles, reminders, suggestions, giveaways and fun. Every feature is a module you toggle in Nexus settings.",
   "tagline": "One Aero, every essential.",
+  "owner": "Saith",
   "category": "community",
   "tags": [
     "moderation",
@@ -10,7 +11,7 @@
     "giveaways",
     "utility"
   ],
-  "visibility": "public",
+  "visibility": "private",
   "events": [
     "member.joined",
     "member.left",
