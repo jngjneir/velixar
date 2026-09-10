@@ -185,6 +185,8 @@ aero.on('member.joined', async (ev) => {
         description: `Great to have you here, ${mention}. Take a moment to read the rules, then${rolesReady ? ' grab a role below and' : ''} jump in and say hi. 👋`,
         color: BRAND,
         thumbnail: member.avatar_url ? { url: member.avatar_url } : undefined,
+        footer: { text: 'Velixar · welcome' },
+        timestamp: new Date().toISOString(),
       }],
       components: rolesReady ? [{ components: [
         { type: 'button', style: 'primary', label: 'Get roles', custom_id: 'roles:open' },
@@ -2808,14 +2810,20 @@ aero.component('giveaway:create', async (i) => {
   } catch (e) { return i.replyEphemeral(`❌ Could not start it: ${e.message}`); }
 });
 function giveawayEmbed(prize, winners, endsAt, count, endedText) {
+  const ended = !!endedText;
   return {
     embeds: [{
       title: '🎉 Giveaway',
-      description: endedText || `**Prize:** ${prize}\n**Winners:** ${winners}\n**Entries:** ${count}\n\nPress **Enter** below to join!`,
-      color: endedText ? '#6B7280' : BRAND,
-      footer: { text: endedText ? 'Giveaway ended' : `Ends at ${new Date(endsAt).toLocaleTimeString()}` },
+      description: ended ? endedText : `Press **Enter** below for your chance to win!`,
+      color: ended ? '#6B7280' : BRAND,
+      fields: ended ? undefined : [
+        { name: '🎁 Prize', value: `**${prize}**`, inline: true },
+        { name: '🏆 Winners', value: `${winners}`, inline: true },
+        { name: '🎫 Entries', value: `${count}`, inline: true },
+      ],
+      footer: { text: ended ? 'Velixar · giveaway ended' : `Velixar · ends ${new Date(endsAt).toLocaleTimeString()}` },
     }],
-    components: endedText ? [] : [{ components: [{ type: 'button', style: 'primary', label: `Enter (${count})`, custom_id: 'giveaway:enter' }] }],
+    components: ended ? [] : [{ components: [{ type: 'button', style: 'success', label: `🎉 Enter  (${count})`, custom_id: 'giveaway:enter' }] }],
   };
 }
 aero.component('giveaway:enter', (i) => {
@@ -2870,7 +2878,7 @@ const catValue = (c) => c.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)
 // with either a single "Open a ticket" button or a reason dropdown.
 function ticketPanel(nexusId) {
   const t = cfg(nexusId);
-  const embed = { title: `🎫 ${t.ticket_title}`, description: t.ticket_desc, color: t.ticket_color };
+  const embed = { title: `🎫 ${t.ticket_title}`, description: t.ticket_desc, color: t.ticket_color, footer: { text: 'Velixar · a private space opens just for you' } };
   const cats = t.ticket_categories || [];
   const row = cats.length > 1
     ? { components: [{
