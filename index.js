@@ -63,6 +63,18 @@ const say = (title, description, color = BRAND, footer = true) => ({
   embeds: [{ title, description, color, ...(footer ? { footer: { text: BRAND_FOOTER } } : {}) }],
 });
 
+// A consistent moderation confirmation card: the action, the member, the
+// moderator, and an optional extra detail field (warning count, duration…).
+// Keeps every mod reply auditable and on-brand in one place.
+function modCard(i, { title, description, color = WARN_C, target, detail }) {
+  const fields = [
+    { name: 'Member', value: `<@${target}>`, inline: true },
+    { name: 'Moderator', value: `<@${i.invoker.id}>`, inline: true },
+  ];
+  if (detail) fields.push({ name: detail.name, value: detail.value, inline: true });
+  return rich({ title, description, color, fields, footer: 'Velixar · moderation' });
+}
+
 // Rich embed builder for a consistent, polished look: optional thumbnail,
 // fields, footer and an ISO timestamp. Keeps every command's card on-brand.
 function rich({ title, description, color = BRAND, thumbnail, image, fields, footer, timestamp = true }) {
@@ -2219,15 +2231,15 @@ async function doWarn(i, target, respond) {
     if (warnings >= 5) {
       await aero.banMember(i.nexus_id, target, 'Reached 5 warnings').catch(() => {});
       modlog(i.nexus_id, { title: '🔨 Member banned', color: DANGER_C, actor: i.invoker.name, lines: [`<@${target}> banned after **5** warnings.`] });
-      return respond(say('Member banned', `<@${target}> hit **5** warnings and was banned.`, DANGER_C));
+      return respond(modCard(i, { title: '🔨 Member banned', description: `Reached **5** warnings and was auto-banned.`, color: DANGER_C, target, detail: { name: 'Warnings', value: '5' } }));
     }
     if (warnings >= 3) {
       await aero.timeoutMember(i.nexus_id, target, 60, 'Reached 3 warnings').catch(() => {});
       modlog(i.nexus_id, { title: '🔇 Auto timeout', color: WARN_C, actor: i.invoker.name, lines: [`<@${target}> timed out 1h after **3** warnings.`] });
-      return respond(say('Auto timeout', `<@${target}> hit **3** warnings and was timed out for 1 hour.`, WARN_C));
+      return respond(modCard(i, { title: '🔇 Auto timeout', description: `Reached **3** warnings and was timed out for **1 hour**.`, color: WARN_C, target, detail: { name: 'Warnings', value: String(warnings) } }));
     }
     modlog(i.nexus_id, { title: '⚠️ Member warned', color: WARN_C, actor: i.invoker.name, lines: [`<@${target}> now has **${warnings}** warning(s).`] });
-    return respond(say('Member warned', `<@${target}> now has **${warnings}** warning(s). (3 = timeout, 5 = ban)`, OK));
+    return respond(modCard(i, { title: '⚠️ Member warned', description: `3 warnings triggers a timeout, 5 a ban.`, color: WARN_C, target, detail: { name: 'Warnings', value: String(warnings) } }));
   } catch (e) { return i.replyEphemeral(`❌ ${e.message}`); }
 }
 aero.command('warn', (i) => {
@@ -2257,7 +2269,7 @@ async function doTimeout(i, target, respond) {
   try {
     await aero.timeoutMember(i.nexus_id, target, 10, 'Timed out via Velixar');
     modlog(i.nexus_id, { title: '🔇 Member timed out', color: WARN_C, actor: i.invoker.name, lines: [`<@${target}> timed out for 10 minutes.`] });
-    return respond(say('Member timed out', `<@${target}> is timed out for 10 minutes.`, OK));
+    return respond(modCard(i, { title: '🔇 Member timed out', description: 'The platform lifts the timeout automatically.', color: WARN_C, target, detail: { name: 'Duration', value: '10 min' } }));
   } catch (e) { return i.replyEphemeral(`❌ ${e.message}`); }
 }
 aero.command('timeout', (i) => {
@@ -2276,7 +2288,7 @@ async function doTempmute(i, target, minsRaw) {
   try {
     await aero.timeoutMember(i.nexus_id, target, mins, `Timed out ${mins}m via Velixar`);
     modlog(i.nexus_id, { title: '🔇 Member timed out', color: WARN_C, actor: i.invoker.name, lines: [`<@${target}> timed out for **${mins} min**.`] });
-    return i.replyEphemeral(say('Timed out', `<@${target}> is timed out for **${mins} minutes**.`, OK));
+    return i.replyEphemeral(modCard(i, { title: '🔇 Member timed out', description: 'The platform lifts the timeout automatically.', color: WARN_C, target, detail: { name: 'Duration', value: `${mins} min` } }));
   } catch (e) { return i.replyEphemeral(`❌ ${e.message}`); }
 }
 aero.command('tempmute', (i) => {
@@ -2319,7 +2331,18 @@ function memberActionCommand(name, { title, prompt, run, logTitle, logColor }) {
     try {
       const msg = await run(i, target);
       modlog(i.nexus_id, { title: logTitle, color: logColor, actor: i.invoker.name, lines: [`<@${target}>`] });
-      return respond(say(logTitle, msg, logColor));
+      // A consistent moderation card: what happened + who did it, so every
+      // action reads as a proper, auditable confirmation.
+      return respond(rich({
+        title: logTitle,
+        description: msg,
+        color: logColor,
+        fields: [
+          { name: 'Member', value: `<@${target}>`, inline: true },
+          { name: 'Moderator', value: `<@${i.invoker.id}>`, inline: true },
+        ],
+        footer: 'Velixar · moderation',
+      }));
     } catch (e) { return i.replyEphemeral(`❌ ${e.message}`); }
   };
   aero.command(name, (i) => {
