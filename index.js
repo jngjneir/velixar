@@ -1886,8 +1886,22 @@ aero.command('inventory', (i) => {
   if (!ecoGate(i)) return i.replyEphemeral('The Economy module is off in this Nexus.');
   const inv = store.listInventory(i.nexus_id, i.invoker.id);
   if (!inv.length) return i.replyEphemeral(say('🎒 Inventory', 'Empty. Buy something with /shop and /buy.'));
-  const body = inv.map((r) => { const s = SHOP.find((x) => x.id === r.item); return `${s ? s.emoji : '📦'} **${s ? s.name : r.item}** ×${r.qty}`; }).join('\n');
-  return i.replyEphemeral(say('🎒 Your inventory', body));
+  let totalQty = 0, totalValue = 0;
+  const body = inv.map((r) => {
+    const s = SHOP.find((x) => x.id === r.item);
+    totalQty += r.qty; totalValue += (s ? s.price : 0) * r.qty;
+    return `${s ? s.emoji : '📦'} **${s ? s.name : r.item}** ×${r.qty}`;
+  }).join('\n');
+  return i.replyEphemeral(rich({
+    title: '🎒 Your inventory',
+    description: body,
+    color: BRAND,
+    fields: [
+      { name: 'Items', value: `${totalQty}`, inline: true },
+      { name: 'Est. value', value: fmtCoins(totalValue), inline: true },
+    ],
+    footer: 'Velixar · sell with /sell',
+  }));
 });
 
 // ── Gambling games ──
@@ -3367,15 +3381,20 @@ aero.command('nexusstats', (i) => {
   const xp = store.xpStats(i.nexus_id);
   const top = store.topXp(i.nexus_id, 1)[0];
   const g = on(i.nexus_id, 'counting') ? store.getCounting(i.nexus_id) : null;
-  const lines = [
-    `**Members with XP:** ${xp.members}`,
-    `**Total XP tracked:** ${xp.total}`,
-    top ? `**Top member:** <@${top.user_id}> (${top.points} XP)` : null,
-    `**Open tickets:** ${store.openTicketCount(i.nexus_id)}`,
-    `**Active giveaways:** ${store.activeGiveawayCount(i.nexus_id)}`,
-    g && g.space_id ? `**Counting:** at ${g.current} (best ${g.best})` : null,
-  ].filter(Boolean);
-  return i.replyEphemeral(say('📊 Nexus stats', lines.join('\n')));
+  const fields = [
+    { name: 'Members with XP', value: String(xp.members), inline: true },
+    { name: 'Total XP', value: xp.total.toLocaleString(), inline: true },
+    { name: 'Open tickets', value: String(store.openTicketCount(i.nexus_id)), inline: true },
+    { name: 'Active giveaways', value: String(store.activeGiveawayCount(i.nexus_id)), inline: true },
+  ];
+  if (g && g.space_id) fields.push({ name: 'Counting', value: `at ${g.current} (best ${g.best})`, inline: true });
+  return i.replyEphemeral(rich({
+    title: '📊 Nexus stats',
+    description: top ? `Top member: <@${top.user_id}> · **${top.points.toLocaleString()}** XP` : 'No XP earned yet.',
+    color: BRAND,
+    fields,
+    footer: 'Velixar',
+  }));
 });
 
 // ─────────────────────────────────────────────────────────────
