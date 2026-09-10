@@ -1872,6 +1872,11 @@ aero.command('lottery', (i) => {
 const bjState = new Map(); // messageId -> { bet, player:[], dealer:[], done }
 const bjDraw = () => 1 + Math.floor(Math.random() * 13);
 const bjVal = (cards) => { let sum = cards.reduce((a, c) => a + Math.min(c, 10), 0); let aces = cards.filter((c) => c === 1).length; while (aces > 0 && sum + 10 <= 21) { sum += 10; aces--; } return sum; };
+// Numeric 1..13 -> a card face on a suit picked by position, so a hand reads
+// like real cards AND a card's suit stays stable across re-renders (index-based,
+// not random each frame). The value math above stays numeric and untouched.
+const BJ_RANK = { 1: 'A', 11: 'J', 12: 'Q', 13: 'K' };
+const bjCard = (c, idx = 0) => `${BJ_RANK[c] || c}${['♠', '♥', '♦', '♣'][idx % 4]}`;
 aero.command('blackjack', (i) => {
   if (!ecoGate(i)) return i.replyEphemeral('The Economy module is off in this Nexus.');
   return inlineText(i, (v) => startBj(i, v), () => aero.openModal(i.nexus_id, i.invoker.id, { title: 'Blackjack', custom_id: 'eco:bj', inputs: [{ id: 'bet', label: 'Bet amount', style: 'short', required: true, placeholder: '100' }] }, { spaceId: i.space_id }));
@@ -1889,13 +1894,27 @@ async function startBj(i, raw) {
 }
 function bjView(s) {
   const pv = bjVal(s.player), dv = bjVal(s.dealer);
-  let desc = `**Your hand:** ${s.player.join(', ')} (**${pv}**)\n**Dealer:** ${s.dealer.join(', ')} (**${dv}**)`;
-  if (s.done) desc += `\n\n**${s.done}**`;
-  return { embeds: [{ title: '🃏 Blackjack', description: desc, color: s.done ? OK : BRAND, footer: { text: `Bet: ${s.bet}` } }],
+  // Colour the finished board by outcome: green win, red loss, amber push.
+  const won = s.done && /win/i.test(s.done);
+  const lost = s.done && /(lost|Bust|Dealer wins)/i.test(s.done);
+  const color = !s.done ? BRAND : won ? OK : lost ? DANGER_C : WARN_C;
+  return {
+    embeds: [{
+      title: '🃏 Blackjack',
+      description: s.done ? `**${s.done}**` : 'Hit to draw, or stand to hold.',
+      color,
+      fields: [
+        { name: 'Your hand', value: `${s.player.map(bjCard).join('  ')}\n**${pv}**`, inline: true },
+        { name: 'Dealer', value: `${s.dealer.map(bjCard).join('  ')}\n**${dv}**`, inline: true },
+        { name: 'Bet', value: fmtCoins(s.bet), inline: true },
+      ],
+      footer: { text: 'Velixar · Blackjack' },
+    }],
     components: s.done ? [] : [{ components: [
       { type: 'button', style: 'success', label: 'Hit', custom_id: 'bj:hit' },
       { type: 'button', style: 'danger', label: 'Stand', custom_id: 'bj:stand' },
-    ] }] };
+    ] }],
+  };
 }
 function handleBj(i, action) {
   const s = bjState.get(String(i.message_id));
@@ -1903,13 +1922,13 @@ function handleBj(i, action) {
   if (i.invoker.id !== s.owner) return i.replyEphemeral("This isn't your game.");
   if (action === 'hit') {
     s.player.push(bjDraw());
-    if (bjVal(s.player) > 21) { s.done = `Bust! You lost ${s.bet} coins.`; store.addCoins(i.nexus_id, i.invoker.id, -s.bet); }
+    if (bjVal(s.player) > 21) { s.done = `Bust! You lost ${fmtCoins(s.bet)}.`; store.addCoins(i.nexus_id, i.invoker.id, -s.bet); }
   } else {
     while (bjVal(s.dealer) < 17) s.dealer.push(bjDraw());
     const pv = bjVal(s.player), dv = bjVal(s.dealer);
-    if (dv > 21 || pv > dv) { s.done = `You win ${s.bet} coins! 🎉`; store.addCoins(i.nexus_id, i.invoker.id, s.bet); }
-    else if (pv < dv) { s.done = `Dealer wins. You lost ${s.bet} coins.`; store.addCoins(i.nexus_id, i.invoker.id, -s.bet); }
-    else s.done = 'Push (tie). Bet returned.';
+    if (dv > 21 || pv > dv) { s.done = `You win ${fmtCoins(s.bet)}! 🎉`; store.addCoins(i.nexus_id, i.invoker.id, s.bet); }
+    else if (pv < dv) { s.done = `Dealer wins. You lost ${fmtCoins(s.bet)}.`; store.addCoins(i.nexus_id, i.invoker.id, -s.bet); }
+    else s.done = 'Push (tie). Your bet is returned.';
   }
   if (s.done) bjState.delete(String(i.message_id));
   return i.update(bjView(s));
