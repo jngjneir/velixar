@@ -1211,10 +1211,12 @@ function tttView(s) {
       return { type: 'button', style: mark === null ? 'secondary' : (mark === 0 ? 'danger' : 'primary'), label: mark === null ? '·' : TTT_MARK[mark], custom_id: `ttt:${idx}` };
     }) });
   }
+  const draw = s.done === 'draw';
   const desc = s.done
-    ? (s.done === 'draw' ? "It's a draw!" : `${TTT_MARK[s.done.mark]} <@${s.done.winner}> wins!`)
+    ? (draw ? "🤝 It's a draw!" : `${TTT_MARK[s.done.mark]} <@${s.done.winner}> wins! 🎉`)
     : `${TTT_MARK[s.turn]} <@${s.players[s.turn]}>'s turn`;
-  return { embeds: [{ title: '⭕ Tic-tac-toe', description: `<@${s.players[0]}> ${TTT_MARK[0]}  vs  ${TTT_MARK[1]} <@${s.players[1]}>\n\n${desc}`, color: s.done ? OK : BRAND }], components: rows };
+  const color = !s.done ? BRAND : draw ? WARN_C : OK;
+  return { embeds: [{ title: '⭕ Tic-tac-toe', description: `<@${s.players[0]}> ${TTT_MARK[0]}  vs  ${TTT_MARK[1]} <@${s.players[1]}>\n\n${desc}`, color, footer: { text: 'Velixar' } }], components: rows };
 }
 const TTT_WINS = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 function handleTtt(i) {
@@ -1297,11 +1299,13 @@ async function startC4(i, opp, respond) {
 const C4_DISC = ['🔴', '🟡'];
 function c4View(s) {
   const grid = s.board.map((row) => row.map((c) => (c === null ? '⚪' : C4_DISC[c])).join('')).join('\n');
+  const draw = s.done === 'draw';
   const desc = s.done
-    ? (s.done === 'draw' ? "It's a draw!" : `${C4_DISC[s.done.mark]} <@${s.done.winner}> wins!`)
+    ? (draw ? "🤝 It's a draw!" : `${C4_DISC[s.done.mark]} <@${s.done.winner}> wins! 🎉`)
     : `${C4_DISC[s.turn]} <@${s.players[s.turn]}>'s turn`;
   const btns = [0, 1, 2, 3, 4, 5, 6].map((c) => ({ type: 'button', style: 'secondary', label: `${c + 1}`, custom_id: `c4:${c}` }));
-  return { embeds: [{ title: '🔴 Connect 4', description: `<@${s.players[0]}> ${C4_DISC[0]} vs ${C4_DISC[1]} <@${s.players[1]}>\n\n${grid}\n\n${desc}`, color: s.done ? OK : BRAND }], components: s.done ? [] : [{ components: btns.slice(0, 4) }, { components: btns.slice(4) }] };
+  const color = !s.done ? BRAND : draw ? WARN_C : OK;
+  return { embeds: [{ title: '🔴 Connect 4', description: `<@${s.players[0]}> ${C4_DISC[0]} vs ${C4_DISC[1]} <@${s.players[1]}>\n\n${grid}\n\n${desc}`, color, footer: { text: 'Velixar' } }], components: s.done ? [] : [{ components: btns.slice(0, 4) }, { components: btns.slice(4) }] };
 }
 function c4Win(b, mark) {
   for (let r = 0; r < 6; r++) for (let c = 0; c < 7; c++) {
@@ -2745,34 +2749,46 @@ aero.command('suggest', (i) => {
     inputs: [{ id: 'idea', label: 'Your suggestion', style: 'paragraph', required: true, placeholder: 'Add a music space…' }],
   }, { spaceId: i.space_id });
 });
+// Render a suggestion card with the live tally + a score gauge, so a vote
+// re-sends the WHOLE message (embed + buttons) — an update() with only
+// components would wipe the suggestion text.
+function suggestionView(box) {
+  const up = box.up.size, down = box.down.size, total = up + down;
+  const score = total ? Math.round((up / total) * 100) : 0;
+  const filled = total ? Math.round((up / total) * 10) : 0;
+  const gauge = total ? `\`${'█'.repeat(filled)}${'░'.repeat(10 - filled)}\`  ${score}% in favour` : 'No votes yet · be the first!';
+  return {
+    embeds: [{
+      title: '💡 Suggestion',
+      description: `${box.idea}\n\n${gauge}`,
+      color: total === 0 ? BRAND : score >= 50 ? OK : WARN_C,
+      footer: { text: `Velixar · suggested by ${box.author}` },
+    }],
+    components: [{ components: [
+      { type: 'button', style: 'success', label: `👍 ${up}`, custom_id: 'suggest:up' },
+      { type: 'button', style: 'danger', label: `👎 ${down}`, custom_id: 'suggest:down' },
+    ] }],
+  };
+}
 aero.component('suggest:submit', async (i) => {
   const idea = (i.fields?.idea || '').trim();
   if (!idea) return i.replyEphemeral('Write your suggestion first.');
   const space = cfg(i.nexus_id).suggestions_space;
   if (!space) return i.replyEphemeral('No suggestions space is set up.');
   try {
-    await aero.sendMessage(i.nexus_id, space, {
-      embeds: [{ title: '💡 New suggestion', description: idea, color: BRAND, footer: { text: `Suggested by ${i.invoker.name}` } }],
-      components: [{ components: [
-        { type: 'button', style: 'success', label: '👍 0', custom_id: 'suggest:up' },
-        { type: 'button', style: 'danger', label: '👎 0', custom_id: 'suggest:down' },
-      ] }],
-    });
+    const box = { up: new Set(), down: new Set(), idea, author: i.invoker.name };
+    const res = await aero.sendMessage(i.nexus_id, space, suggestionView(box));
+    if (res?.message?.id) suggestVotes.set(String(res.message.id), box);
     return i.replyEphemeral('✅ Suggestion posted. Thanks!');
   } catch (e) { return i.replyEphemeral(`❌ Could not post it: ${e.message}`); }
 });
 const suggestVote = (i, dir) => {
-  const box = suggestVotes.get(i.message_id) || { up: new Set(), down: new Set() };
+  const box = suggestVotes.get(String(i.message_id));
+  if (!box) return i.replyEphemeral('This suggestion is no longer active.');
   box.up.delete(i.invoker.id); box.down.delete(i.invoker.id);
   box[dir].add(i.invoker.id);
-  suggestVotes.set(i.message_id, box);
-  return i.update({
-    // Keep the original embed by re-sending a compact version with the tally.
-    components: [{ components: [
-      { type: 'button', style: 'success', label: `👍 ${box.up.size}`, custom_id: 'suggest:up' },
-      { type: 'button', style: 'danger', label: `👎 ${box.down.size}`, custom_id: 'suggest:down' },
-    ] }],
-  });
+  suggestVotes.set(String(i.message_id), box);
+  return i.update(suggestionView(box));
 };
 aero.component('suggest:up', (i) => suggestVote(i, 'up'));
 aero.component('suggest:down', (i) => suggestVote(i, 'down'));
