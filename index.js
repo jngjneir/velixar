@@ -2025,13 +2025,15 @@ aero.command('beg', (i) => {
   if (!ecoGate(i)) return i.replyEphemeral('The Economy module is off in this Nexus.');
   const got = Math.random() < 0.7 ? 5 + Math.floor(Math.random() * 45) : 0;
   if (got) store.addCoins(i.nexus_id, i.invoker.id, got);
-  return i.reply(got ? say('🙏 Begging', `Someone gave you ${fmtCoins(got)}.`, OK) : say('🙏 Begging', 'No one spared a coin. 😔', BRAND));
+  const bal = fmtCoins(store.getCoins(i.nexus_id, i.invoker.id).balance);
+  return i.reply(got ? say('🙏 Begging', `Someone gave you ${fmtCoins(got)}.\nBalance: ${bal}`, OK) : say('🙏 Begging', 'No one spared a coin. 😔', BRAND));
 });
 aero.command('crime', (i) => {
   if (!ecoGate(i)) return i.replyEphemeral('The Economy module is off in this Nexus.');
-  if (Math.random() < 0.55) { const loot = 50 + Math.floor(Math.random() * 150); store.addCoins(i.nexus_id, i.invoker.id, loot); return i.reply(say('🦹 Crime', `You pulled it off and got ${fmtCoins(loot)}!`, OK)); }
+  const bal = () => fmtCoins(store.getCoins(i.nexus_id, i.invoker.id).balance);
+  if (Math.random() < 0.55) { const loot = 50 + Math.floor(Math.random() * 150); store.addCoins(i.nexus_id, i.invoker.id, loot); return i.reply(say('🦹 Crime', `You pulled it off and got ${fmtCoins(loot)}!\nBalance: ${bal()}`, OK)); }
   const fine = 30 + Math.floor(Math.random() * 100); store.addCoins(i.nexus_id, i.invoker.id, -fine);
-  return i.reply(say('🚔 Busted', `You got caught and paid a ${fmtCoins(fine)} fine.`, DANGER_C));
+  return i.reply(say('🚔 Busted', `You got caught and paid a ${fmtCoins(fine)} fine.\nBalance: ${bal()}`, DANGER_C));
 });
 aero.component('bj:hit', (i) => handleBj(i, 'hit'));
 aero.component('bj:stand', (i) => handleBj(i, 'stand'));
@@ -3370,13 +3372,21 @@ aero.command('roles-clear', (i) => {
 // /config — show what's configured for this Nexus.
 aero.command('config', (i) => {
   const t = cfg(i.nexus_id);
-  return i.replyEphemeral(say('Velixar config', [
-    `**Welcome space:** ${t.welcome_space ? `set` : 'not set (/welcome-setup)'}`,
-    `**Ticket panel:** ${t.ticket_title}`,
-    `**Ticket topics:** ${(t.ticket_categories || []).join(', ') || 'single button'}`,
-    `**Ticket staff role:** ${t.ticket_staff_role ? 'set' : 'not set (/ticket-staff)'}`,
-    `**Self-assign roles:** ${t.self_roles.length ? t.self_roles.map((r) => r.label).join(', ') : 'none (/roles-add)'}`,
-  ].join('\n')));
+  const ok = (v) => v ? '✅' : '⚠️';
+  return i.replyEphemeral(rich({
+    title: '⚙️ Velixar configuration',
+    description: `A quick status of this Nexus's setup. Run the linked command to change anything.`,
+    color: BRAND,
+    fields: [
+      { name: `${ok(t.welcome_space)} Welcome`, value: t.welcome_space ? 'Space set' : 'Run /welcome-setup', inline: true },
+      { name: `${ok(t.modlog_space)} Mod log`, value: t.modlog_space ? 'Space set' : 'Run /modlog-setup', inline: true },
+      { name: `${ok(t.suggestions_space)} Suggestions`, value: t.suggestions_space ? 'Space set' : 'Run /suggest-setup', inline: true },
+      { name: `${ok(t.ticket_staff_role)} Ticket staff`, value: t.ticket_staff_role ? 'Role set' : 'Run /ticket-staff', inline: true },
+      { name: `${ok(t.self_roles.length)} Self-roles`, value: t.self_roles.length ? `${t.self_roles.length} role(s)` : 'Run /roles-add', inline: true },
+      { name: '⌨️ Prefix', value: `\`${t.prefix || '!'}\``, inline: true },
+    ],
+    footer: 'Velixar · manage modules in Nexus settings',
+  }));
 });
 
 // /userinfo — pick a member, see their public stats (XP/level + warnings if
