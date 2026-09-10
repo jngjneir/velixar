@@ -1,0 +1,1641 @@
+{
+  "name": "Velixar",
+  "description": "The all-in-one Aero for your Nexus: levels with role rewards, moderation, tickets, self-roles, reminders, suggestions, giveaways and fun. Every feature is a module you toggle in Nexus settings.",
+  "tagline": "One Aero, every essential.",
+  "category": "community",
+  "tags": [
+    "moderation",
+    "levels",
+    "tickets",
+    "giveaways",
+    "utility"
+  ],
+  "visibility": "public",
+  "events": [
+    "member.joined",
+    "member.left",
+    "message.created"
+  ],
+  "commands": [
+    {
+      "name": "help",
+      "description": "Show what Velixar can do."
+    },
+    {
+      "name": "config",
+      "description": "Show this Nexus's Velixar configuration."
+    },
+    {
+      "name": "ping",
+      "description": "Check that Velixar is online."
+    },
+    {
+      "name": "uptime",
+      "description": "How long Velixar has been running."
+    },
+    {
+      "name": "aeroinfo",
+      "description": "About Velixar and its status."
+    },
+    {
+      "name": "about",
+      "description": "A short intro to Velixar."
+    },
+    {
+      "name": "math",
+      "description": "Evaluate a simple arithmetic expression.",
+      "options": [
+        {
+          "name": "expression",
+          "type": "string",
+          "required": true,
+          "description": "e.g. 2 + 2 * 10"
+        }
+      ]
+    },
+    {
+      "name": "timestamp",
+      "description": "Turn minutes-from-now into an absolute time.",
+      "options": [
+        {
+          "name": "minutes",
+          "type": "string",
+          "required": true,
+          "description": "minutes from now"
+        }
+      ]
+    },
+    {
+      "name": "poll-multi",
+      "description": "Start a multi-option poll (2 to 5 choices)."
+    },
+    {
+      "name": "tag",
+      "description": "Post a saved tag.",
+      "options": [
+        {
+          "name": "name",
+          "type": "string",
+          "required": true,
+          "description": "the tag name"
+        }
+      ]
+    },
+    {
+      "name": "tag-list",
+      "description": "List the saved tags."
+    },
+    {
+      "name": "tag-add",
+      "description": "Save a new tag (admin).",
+      "required_permission": "manage_nexus"
+    },
+    {
+      "name": "tag-delete",
+      "description": "Delete a tag (admin).",
+      "required_permission": "manage_nexus"
+    },
+    {
+      "name": "rank",
+      "description": "See your level and XP.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "whose rank (optional)"
+        }
+      ]
+    },
+    {
+      "name": "leaderboard",
+      "description": "Top members by XP."
+    },
+    {
+      "name": "daily",
+      "description": "Claim your daily XP bonus and build a streak."
+    },
+    {
+      "name": "level-roles",
+      "description": "List the level-up role rewards."
+    },
+    {
+      "name": "level-role-add",
+      "description": "Reward a role at a chosen level (admin).",
+      "required_permission": "manage_roles"
+    },
+    {
+      "name": "givexp",
+      "description": "Give or remove a member's XP (admin).",
+      "required_permission": "manage_nexus",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "pick a member with @"
+        },
+        {
+          "name": "amount",
+          "type": "string",
+          "required": true,
+          "description": "XP amount (minus to remove)"
+        }
+      ]
+    },
+    {
+      "name": "roll",
+      "description": "Roll a six-sided die."
+    },
+    {
+      "name": "coinflip",
+      "description": "Flip a coin."
+    },
+    {
+      "name": "eightball",
+      "description": "Ask the magic 8-ball."
+    },
+    {
+      "name": "choose",
+      "description": "Let Velixar pick from your options.",
+      "options": [
+        {
+          "name": "options",
+          "type": "string",
+          "required": true,
+          "description": "comma-separated options"
+        }
+      ]
+    },
+    {
+      "name": "poll",
+      "description": "Start a quick yes/no poll.",
+      "options": [
+        {
+          "name": "question",
+          "type": "string",
+          "required": false,
+          "description": "the poll question (optional)"
+        }
+      ]
+    },
+    {
+      "name": "dice",
+      "description": "Roll a die with any number of sides.",
+      "options": [
+        {
+          "name": "number",
+          "type": "string",
+          "required": false,
+          "description": "sides, e.g. 20"
+        }
+      ]
+    },
+    {
+      "name": "rps",
+      "description": "Play rock, paper, scissors."
+    },
+    {
+      "name": "ship",
+      "description": "Ship two members for a compatibility score."
+    },
+    {
+      "name": "mock",
+      "description": "Turn text into mocking case.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "description": "text to mock"
+        }
+      ]
+    },
+    {
+      "name": "reverse",
+      "description": "Reverse your text.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "description": "text to reverse"
+        }
+      ]
+    },
+    {
+      "name": "joke",
+      "description": "Tell a random joke."
+    },
+    {
+      "name": "fact",
+      "description": "Share a random fun fact."
+    },
+    {
+      "name": "advice",
+      "description": "Get a piece of advice."
+    },
+    {
+      "name": "quote",
+      "description": "Show an inspiring quote."
+    },
+    {
+      "name": "inspire",
+      "description": "A quick dose of inspiration."
+    },
+    {
+      "name": "clap",
+      "description": "Add claps between your words.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "description": "text to clap"
+        }
+      ]
+    },
+    {
+      "name": "spaceout",
+      "description": "S p a c e   o u t   your text.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "description": "text to space out"
+        }
+      ]
+    },
+    {
+      "name": "emojify",
+      "description": "Turn letters into emoji.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "description": "text to emojify"
+        }
+      ]
+    },
+    {
+      "name": "rate",
+      "description": "Get a playful out-of-10 rating.",
+      "options": [
+        {
+          "name": "thing",
+          "type": "string",
+          "required": true,
+          "description": "what to rate"
+        }
+      ]
+    },
+    {
+      "name": "number",
+      "description": "Guess a number from 1 to 10."
+    },
+    {
+      "name": "wouldyourather",
+      "description": "A would-you-rather prompt."
+    },
+    {
+      "name": "truthordare",
+      "description": "A truth-or-dare prompt."
+    },
+    {
+      "name": "flip",
+      "description": "Quick coin flip."
+    },
+    {
+      "name": "randomcolor",
+      "description": "Show a random colour swatch."
+    },
+    {
+      "name": "password",
+      "description": "Generate a strong password (private)."
+    },
+    {
+      "name": "slots",
+      "description": "Spin the slot machine."
+    },
+    {
+      "name": "countdown",
+      "description": "Run a live countdown.",
+      "options": [
+        {
+          "name": "seconds",
+          "type": "string",
+          "required": true,
+          "description": "seconds, max 30"
+        }
+      ]
+    },
+    {
+      "name": "vote",
+      "description": "Start a yes / no / abstain vote.",
+      "options": [
+        {
+          "name": "question",
+          "type": "string",
+          "required": true,
+          "description": "the question"
+        }
+      ]
+    },
+    {
+      "name": "roll-team",
+      "description": "Split members into two random teams."
+    },
+    {
+      "name": "hug",
+      "description": "Hug a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": true,
+          "description": "who to hug"
+        }
+      ]
+    },
+    {
+      "name": "pat",
+      "description": "Pat a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": true,
+          "description": "who to pat"
+        }
+      ]
+    },
+    {
+      "name": "highfive",
+      "description": "High-five a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": true,
+          "description": "who to high-five"
+        }
+      ]
+    },
+    {
+      "name": "slap",
+      "description": "Slap a member (playfully).",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": true,
+          "description": "who to slap"
+        }
+      ]
+    },
+    {
+      "name": "poke",
+      "description": "Poke a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": true,
+          "description": "who to poke"
+        }
+      ]
+    },
+    {
+      "name": "roles",
+      "description": "Open the self-assign roles menu."
+    },
+    {
+      "name": "roles-remove",
+      "description": "Remove a self-assign role from yourself."
+    },
+    {
+      "name": "roles-add",
+      "description": "Add a self-assign role to the menu (admin).",
+      "required_permission": "manage_roles"
+    },
+    {
+      "name": "roles-clear",
+      "description": "Clear all self-assign roles (admin).",
+      "required_permission": "manage_roles"
+    },
+    {
+      "name": "rr-panel",
+      "description": "Post the reaction-role button panel."
+    },
+    {
+      "name": "rr-add",
+      "description": "Add a reaction-role button (admin).",
+      "required_permission": "manage_roles"
+    },
+    {
+      "name": "rr-clear",
+      "description": "Clear the reaction-role buttons (admin).",
+      "required_permission": "manage_roles"
+    },
+    {
+      "name": "warn",
+      "description": "Warn a member (auto-escalates).",
+      "required_permission": "manage_members",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": true,
+          "description": "who to warn"
+        }
+      ]
+    },
+    {
+      "name": "warnings",
+      "description": "View a member's warnings.",
+      "required_permission": "manage_members",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": true,
+          "description": "whose warnings"
+        }
+      ]
+    },
+    {
+      "name": "timeout",
+      "description": "Time a member out for 10 minutes.",
+      "required_permission": "manage_members",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": true,
+          "description": "who to time out"
+        }
+      ]
+    },
+    {
+      "name": "tempmute",
+      "description": "Time out a member for a chosen duration.",
+      "required_permission": "manage_members",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "who to time out"
+        },
+        {
+          "name": "amount",
+          "type": "string",
+          "required": true,
+          "description": "minutes"
+        }
+      ]
+    },
+    {
+      "name": "purge",
+      "description": "Delete recent messages in this space.",
+      "required_permission": "manage_messages"
+    },
+    {
+      "name": "kick",
+      "description": "Kick a member from the Nexus.",
+      "required_permission": "kick_members",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": true,
+          "description": "who to kick"
+        }
+      ]
+    },
+    {
+      "name": "ban",
+      "description": "Ban a member from the Nexus.",
+      "required_permission": "ban_members",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": true,
+          "description": "who to ban"
+        }
+      ]
+    },
+    {
+      "name": "unwarn",
+      "description": "Clear a member's warnings.",
+      "required_permission": "manage_members",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": true,
+          "description": "whose warnings to clear"
+        }
+      ]
+    },
+    {
+      "name": "lock",
+      "description": "Lock the current space.",
+      "required_permission": "manage_spaces"
+    },
+    {
+      "name": "unlock",
+      "description": "Unlock the current space.",
+      "required_permission": "manage_spaces"
+    },
+    {
+      "name": "role-give",
+      "description": "Give a role to a member.",
+      "required_permission": "manage_roles",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": true,
+          "description": "who gets the role"
+        }
+      ]
+    },
+    {
+      "name": "role-take",
+      "description": "Take a role from a member.",
+      "required_permission": "manage_roles",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": true,
+          "description": "who loses the role"
+        }
+      ]
+    },
+    {
+      "name": "slowmode",
+      "description": "Set this space's slow mode (admin).",
+      "required_permission": "manage_spaces",
+      "options": [
+        {
+          "name": "seconds",
+          "type": "string",
+          "required": true,
+          "description": "seconds, 0 = off"
+        }
+      ]
+    },
+    {
+      "name": "invite",
+      "description": "Create a fresh invite link (admin).",
+      "required_permission": "manage_invites"
+    },
+    {
+      "name": "automod",
+      "description": "View + toggle AutoMod filters (admin).",
+      "required_permission": "manage_members"
+    },
+    {
+      "name": "automod-words",
+      "description": "Set the AutoMod banned-word list (admin).",
+      "required_permission": "manage_members"
+    },
+    {
+      "name": "modlog-setup",
+      "description": "Pick the mod-log space (admin).",
+      "required_permission": "manage_nexus"
+    },
+    {
+      "name": "announce",
+      "description": "Post an announcement to this space (admin).",
+      "required_permission": "manage_nexus"
+    },
+    {
+      "name": "embed",
+      "description": "Build and post a custom embed (admin).",
+      "required_permission": "manage_nexus"
+    },
+    {
+      "name": "remind",
+      "description": "Set a personal reminder."
+    },
+    {
+      "name": "remindlist",
+      "description": "List and cancel your pending reminders."
+    },
+    {
+      "name": "afk",
+      "description": "Mark yourself AFK until your next message.",
+      "options": [
+        {
+          "name": "reason",
+          "type": "string",
+          "required": false,
+          "description": "reason (optional)"
+        }
+      ]
+    },
+    {
+      "name": "userinfo",
+      "description": "Look up a member's level, streak and warnings.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "whose info (or pick)"
+        }
+      ]
+    },
+    {
+      "name": "nexusstats",
+      "description": "A quick Velixar summary for this Nexus."
+    },
+    {
+      "name": "count-status",
+      "description": "See the current counting-game number."
+    },
+    {
+      "name": "balance",
+      "description": "Check your coin balance."
+    },
+    {
+      "name": "work",
+      "description": "Work to earn coins (hourly)."
+    },
+    {
+      "name": "daily-coins",
+      "description": "Claim your daily coins and streak."
+    },
+    {
+      "name": "rich",
+      "description": "The richest members by coins."
+    },
+    {
+      "name": "pay",
+      "description": "Pay coins to another member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "who to pay"
+        },
+        {
+          "name": "amount",
+          "type": "string",
+          "required": true,
+          "description": "coins"
+        }
+      ]
+    },
+    {
+      "name": "gamble",
+      "description": "Bet coins to double or lose them.",
+      "options": [
+        {
+          "name": "amount",
+          "type": "string",
+          "required": true,
+          "description": "coins to bet"
+        }
+      ]
+    },
+    {
+      "name": "rob",
+      "description": "Try to rob a member (risky).",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": true,
+          "description": "who to rob"
+        }
+      ]
+    },
+    {
+      "name": "count-setup",
+      "description": "Pick the counting-game space (admin).",
+      "required_permission": "manage_nexus"
+    },
+    {
+      "name": "suggest",
+      "description": "Submit a suggestion for the Nexus."
+    },
+    {
+      "name": "suggest-setup",
+      "description": "Pick where suggestions are posted (admin).",
+      "required_permission": "manage_nexus"
+    },
+    {
+      "name": "giveaway",
+      "description": "Start a timed giveaway with an Enter button.",
+      "required_permission": "manage_nexus"
+    },
+    {
+      "name": "panel",
+      "description": "Post the support-ticket panel.",
+      "required_permission": "manage_nexus"
+    },
+    {
+      "name": "ticket-setup",
+      "description": "Customise the ticket panel (admin).",
+      "required_permission": "manage_nexus"
+    },
+    {
+      "name": "ticket-staff",
+      "description": "Set the staff role pinged in tickets (admin).",
+      "required_permission": "manage_nexus"
+    },
+    {
+      "name": "welcome-setup",
+      "description": "Pick the welcome space (admin).",
+      "required_permission": "manage_nexus"
+    },
+    {
+      "name": "veli",
+      "description": "See how many times you have said veli."
+    },
+    {
+      "name": "velitop",
+      "description": "The Nexus veli leaderboard."
+    },
+    {
+      "name": "trivia",
+      "description": "Answer a trivia question for XP."
+    },
+    {
+      "name": "tictactoe",
+      "description": "Challenge a member to tic-tac-toe.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "who to challenge (or pick)"
+        }
+      ]
+    },
+    {
+      "name": "hangman",
+      "description": "Guess the word letter by letter."
+    },
+    {
+      "name": "connect4",
+      "description": "Challenge a member to Connect 4.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "who to challenge (or pick)"
+        }
+      ]
+    },
+    {
+      "name": "unscramble",
+      "description": "Unscramble the word for XP."
+    },
+    {
+      "name": "dice-duel",
+      "description": "Roll against Velixar, higher wins."
+    },
+    {
+      "name": "shop",
+      "description": "Browse the item shop."
+    },
+    {
+      "name": "buy",
+      "description": "Buy an item from the shop.",
+      "options": [
+        {
+          "name": "item",
+          "type": "string",
+          "required": true,
+          "description": "item name, e.g. gem"
+        }
+      ]
+    },
+    {
+      "name": "inventory",
+      "description": "See the items you own."
+    },
+    {
+      "name": "coinflip-bet",
+      "description": "Bet coins on a coin flip.",
+      "options": [
+        {
+          "name": "amount",
+          "type": "string",
+          "required": true,
+          "description": "coins to bet"
+        }
+      ]
+    },
+    {
+      "name": "lottery",
+      "description": "Buy a lottery ticket (50 coins)."
+    },
+    {
+      "name": "blackjack",
+      "description": "Play blackjack against the dealer.",
+      "options": [
+        {
+          "name": "amount",
+          "type": "string",
+          "required": true,
+          "description": "coins to bet"
+        }
+      ]
+    },
+    {
+      "name": "beg",
+      "description": "Beg for a few coins."
+    },
+    {
+      "name": "crime",
+      "description": "Commit a crime for coins (risky)."
+    },
+    {
+      "name": "avatar",
+      "description": "Show a member's avatar.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member (optional)"
+        }
+      ]
+    },
+    {
+      "name": "nexusinfo",
+      "description": "A snapshot card about this Nexus."
+    },
+    {
+      "name": "roleinfo",
+      "description": "Inspect a role."
+    },
+    {
+      "name": "membercount",
+      "description": "How many members have earned XP here."
+    },
+    {
+      "name": "snowflake",
+      "description": "Decode an id's creation time.",
+      "options": [
+        {
+          "name": "id",
+          "type": "string",
+          "required": true,
+          "description": "175928847299117063"
+        }
+      ]
+    },
+    {
+      "name": "base64",
+      "description": "Encode text to Base64.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "description": "hello world"
+        }
+      ]
+    },
+    {
+      "name": "base64decode",
+      "description": "Decode Base64 back to text.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "description": "aGVsbG8="
+        }
+      ]
+    },
+    {
+      "name": "binary",
+      "description": "Turn text into binary.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "description": "hi"
+        }
+      ]
+    },
+    {
+      "name": "leet",
+      "description": "Convert text to leetspeak.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "description": "elite hacker"
+        }
+      ]
+    },
+    {
+      "name": "clapify",
+      "description": "Put 👏 between 👏 every 👏 word.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "description": "say it louder"
+        }
+      ]
+    },
+    {
+      "name": "vaporwave",
+      "description": "Ｆｕｌｌ-ｗｉｄｔｈ aesthetic text.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "description": "aesthetic"
+        }
+      ]
+    },
+    {
+      "name": "wordcount",
+      "description": "Count words and characters.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "description": "paste a paragraph"
+        }
+      ]
+    },
+    {
+      "name": "colorinfo",
+      "description": "Preview + inspect a hex colour.",
+      "options": [
+        {
+          "name": "hex",
+          "type": "string",
+          "required": true,
+          "description": "5865F2"
+        }
+      ]
+    },
+    {
+      "name": "lengthconvert",
+      "description": "Convert between length units.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": true,
+          "description": "10 km mi"
+        }
+      ]
+    },
+    {
+      "name": "warnlist",
+      "description": "View a member's warning history.",
+      "required_permission": "manage_members",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member to check (or use the picker)"
+        }
+      ]
+    },
+    {
+      "name": "softban",
+      "description": "Ban a member to clear their recent messages.",
+      "required_permission": "ban_members",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member to soft-ban (or use the picker)"
+        }
+      ]
+    },
+    {
+      "name": "note",
+      "description": "Add a private staff note to a member.",
+      "required_permission": "manage_members",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member to note (or use the picker)"
+        }
+      ]
+    },
+    {
+      "name": "notes",
+      "description": "Read the staff notes on a member.",
+      "required_permission": "manage_members",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member (or use the picker)"
+        }
+      ]
+    },
+    {
+      "name": "notes-clear",
+      "description": "Clear a member's staff notes.",
+      "required_permission": "manage_members",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member (or use the picker)"
+        }
+      ]
+    },
+    {
+      "name": "modstats",
+      "description": "Moderation + AutoMod status for this Nexus.",
+      "required_permission": "manage_members"
+    },
+    {
+      "name": "slowmode-off",
+      "description": "Clear slow mode in this space.",
+      "required_permission": "manage_spaces"
+    },
+    {
+      "name": "timeout-clear",
+      "description": "Remove a member's timeout.",
+      "required_permission": "manage_members",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member (or use the picker)"
+        }
+      ]
+    },
+    {
+      "name": "purge-user",
+      "description": "Delete a number of recent messages here.",
+      "required_permission": "manage_messages",
+      "options": [
+        {
+          "name": "count",
+          "type": "string",
+          "required": false,
+          "description": "How many (1-100)"
+        }
+      ]
+    },
+    {
+      "name": "modhelp",
+      "description": "A moderator command cheat-sheet.",
+      "required_permission": "manage_members"
+    },
+    {
+      "name": "bank",
+      "description": "View your wallet, bank and net worth."
+    },
+    {
+      "name": "networth",
+      "description": "Your total coins (wallet + bank)."
+    },
+    {
+      "name": "deposit",
+      "description": "Move coins from wallet to bank.",
+      "options": [
+        {
+          "name": "amount",
+          "type": "string",
+          "required": false,
+          "description": "Amount (e.g. 500)"
+        }
+      ]
+    },
+    {
+      "name": "withdraw",
+      "description": "Move coins from bank to wallet.",
+      "options": [
+        {
+          "name": "amount",
+          "type": "string",
+          "required": false,
+          "description": "Amount (e.g. 500)"
+        }
+      ]
+    },
+    {
+      "name": "fish",
+      "description": "Go fishing for coins (30s cooldown)."
+    },
+    {
+      "name": "hunt",
+      "description": "Go hunting for coins (30s cooldown)."
+    },
+    {
+      "name": "mine",
+      "description": "Go mining for coins (30s cooldown)."
+    },
+    {
+      "name": "weekly",
+      "description": "Claim a bigger weekly coin bonus."
+    },
+    {
+      "name": "richest",
+      "description": "The coin leaderboard."
+    },
+    {
+      "name": "give-coins",
+      "description": "Send coins to another member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "Who to pay"
+        },
+        {
+          "name": "amount",
+          "type": "string",
+          "required": false,
+          "description": "How many"
+        }
+      ]
+    },
+    {
+      "name": "roulette",
+      "description": "Bet coins on red, black or green.",
+      "options": [
+        {
+          "name": "amount",
+          "type": "string",
+          "required": false,
+          "description": "Amount (e.g. 100)"
+        }
+      ]
+    },
+    {
+      "name": "dice-bet",
+      "description": "Bet coins on a high/low dice roll.",
+      "options": [
+        {
+          "name": "amount",
+          "type": "string",
+          "required": false,
+          "description": "Amount (e.g. 100)"
+        }
+      ]
+    },
+    {
+      "name": "sell",
+      "description": "Sell a shop item back for half price.",
+      "options": [
+        {
+          "name": "item",
+          "type": "string",
+          "required": false,
+          "description": "Item name"
+        }
+      ]
+    },
+    {
+      "name": "use",
+      "description": "Use an item you own.",
+      "options": [
+        {
+          "name": "item",
+          "type": "string",
+          "required": false,
+          "description": "Item name"
+        }
+      ]
+    },
+    {
+      "name": "guessnumber",
+      "description": "Guess my number between 1 and 100."
+    },
+    {
+      "name": "higherlower",
+      "description": "Guess if the next number is higher or lower."
+    },
+    {
+      "name": "wordle-lite",
+      "description": "Guess the 5-letter word in 6 tries."
+    },
+    {
+      "name": "anagram",
+      "description": "Unscramble the shown word."
+    },
+    {
+      "name": "mathrace",
+      "description": "Solve a quick sum against the clock."
+    },
+    {
+      "name": "slotmachine",
+      "description": "Spin a free 3-reel slot machine."
+    },
+    {
+      "name": "rps-lizard",
+      "description": "Rock-Paper-Scissors-Lizard-Spock vs Velixar."
+    },
+    {
+      "name": "emojiquiz",
+      "description": "Guess the phrase from emojis."
+    },
+    {
+      "name": "reactiontest",
+      "description": "Test your click reaction time."
+    },
+    {
+      "name": "coinstreak",
+      "description": "How long a heads streak can you flip?"
+    },
+    {
+      "name": "kiss",
+      "description": "Kiss a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member"
+        }
+      ]
+    },
+    {
+      "name": "cuddle",
+      "description": "Cuddle a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member"
+        }
+      ]
+    },
+    {
+      "name": "bonk",
+      "description": "Bonk a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member"
+        }
+      ]
+    },
+    {
+      "name": "wave",
+      "description": "Wave at a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member"
+        }
+      ]
+    },
+    {
+      "name": "dance",
+      "description": "Dance with a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member"
+        }
+      ]
+    },
+    {
+      "name": "cry",
+      "description": "Cry on a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member"
+        }
+      ]
+    },
+    {
+      "name": "bite",
+      "description": "Bite a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member"
+        }
+      ]
+    },
+    {
+      "name": "yeet",
+      "description": "Yeet a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member"
+        }
+      ]
+    },
+    {
+      "name": "tickle",
+      "description": "Tickle a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member"
+        }
+      ]
+    },
+    {
+      "name": "boop",
+      "description": "Boop a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member"
+        }
+      ]
+    },
+    {
+      "name": "handshake",
+      "description": "Shake hands with a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member"
+        }
+      ]
+    },
+    {
+      "name": "salute",
+      "description": "Salute a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member"
+        }
+      ]
+    },
+    {
+      "name": "iq",
+      "description": "Measure a member's IQ (for fun).",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member (optional)"
+        }
+      ]
+    },
+    {
+      "name": "simp",
+      "description": "Simp meter (for fun).",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member (optional)"
+        }
+      ]
+    },
+    {
+      "name": "vibecheck",
+      "description": "Vibe check (for fun).",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member (optional)"
+        }
+      ]
+    },
+    {
+      "name": "pp",
+      "description": "PP / confidence meter (for fun).",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member (optional)"
+        }
+      ]
+    },
+    {
+      "name": "howfunny",
+      "description": "How funny are they today (for fun).",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member (optional)"
+        }
+      ]
+    },
+    {
+      "name": "coolness",
+      "description": "Coolness meter (for fun).",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member (optional)"
+        }
+      ]
+    },
+    {
+      "name": "braincells",
+      "description": "Brain-cell meter (for fun).",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member (optional)"
+        }
+      ]
+    },
+    {
+      "name": "love",
+      "description": "Love compatibility with a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member"
+        }
+      ]
+    },
+    {
+      "name": "level",
+      "description": "Quick level check (or @member).",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member (optional)"
+        }
+      ]
+    },
+    {
+      "name": "xp",
+      "description": "Show raw XP (or @member).",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member (optional)"
+        }
+      ]
+    },
+    {
+      "name": "nextlevel",
+      "description": "How much XP to your next level."
+    },
+    {
+      "name": "progress",
+      "description": "Your progress bar to the next level."
+    },
+    {
+      "name": "top",
+      "description": "Top 5 members by XP."
+    },
+    {
+      "name": "randomnumber",
+      "description": "Random number in a range.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": "Range (e.g. 1 100)"
+        }
+      ]
+    },
+    {
+      "name": "pickone",
+      "description": "Pick one of comma-separated options.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": "Options (e.g. tea, coffee)"
+        }
+      ]
+    },
+    {
+      "name": "yesno",
+      "description": "A definitive yes / no / maybe."
+    },
+    {
+      "name": "repeat",
+      "description": "Echo back your text.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": "Text (e.g. echo this)"
+        }
+      ]
+    },
+    {
+      "name": "owoify",
+      "description": "Transform text into OwO-speak.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": "Text (e.g. hello there)"
+        }
+      ]
+    },
+    {
+      "name": "rolldice",
+      "description": "Roll N six-sided dice and sum.",
+      "options": [
+        {
+          "name": "text",
+          "type": "string",
+          "required": false,
+          "description": "How many (e.g. 2)"
+        }
+      ]
+    },
+    {
+      "name": "flames",
+      "description": "Play FLAMES with a member.",
+      "options": [
+        {
+          "name": "user",
+          "type": "user",
+          "required": false,
+          "description": "The member"
+        }
+      ]
+    },
+    {
+      "name": "magic8",
+      "description": "Ask the magic 8-ball."
+    },
+    {
+      "name": "suggestions-list",
+      "description": "Where suggestions are posted."
+    },
+    {
+      "name": "ticket-list",
+      "description": "How many tickets are open."
+    },
+    {
+      "name": "remindme",
+      "description": "Set a personal reminder."
+    }
+  ]
+}

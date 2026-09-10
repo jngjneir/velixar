@@ -1,0 +1,13 @@
+node_modules/
+.env
+npm-debug.log*
+.DS_Store
+
+# Local SQLite data (per-Nexus config, XP, coins, tickets) — runtime state,
+# never committed. Each install builds its own.
+velixar.db
+velixar.db-shm
+velixar.db-wal
+*.db
+*.db-shm
+*.db-wal
