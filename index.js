@@ -1849,11 +1849,11 @@ const doRob = (i, target, respond) => {
   if (Math.random() < 0.5) {
     const stolen = Math.floor(theirBal * (0.1 + Math.random() * 0.2));
     store.transferCoins(i.nexus_id, target, i.invoker.id, stolen);
-    return respond(say('🕵️ Success', `You robbed ${fmtCoins(stolen)} from <@${target}>!`, OK));
+    return respond(say('🕵️ Success', `You robbed ${fmtCoins(stolen)} from <@${target}>!\nBalance: ${fmtCoins(store.getCoins(i.nexus_id, i.invoker.id).balance)}`, OK));
   }
   const fine = 50 + Math.floor(Math.random() * 100);
   store.addCoins(i.nexus_id, i.invoker.id, -fine);
-  return respond(say('🚔 Caught!', `You got caught and paid a ${fmtCoins(fine)} fine.`, DANGER_C));
+  return respond(say('🚔 Caught!', `You got caught and paid a ${fmtCoins(fine)} fine.\nBalance: ${fmtCoins(store.getCoins(i.nexus_id, i.invoker.id).balance)}`, DANGER_C));
 };
 aero.command('rob', (i) => {
   if (!ecoGate(i)) return i.replyEphemeral('The Economy module is off in this Nexus.');
@@ -1949,9 +1949,10 @@ aero.command('lottery', (i) => {
   let prize = 0;
   if (roll < 0.01) prize = 5000; else if (roll < 0.08) prize = 500; else if (roll < 0.3) prize = 100;
   if (prize) store.addCoins(i.nexus_id, i.invoker.id, prize);
+  const newBal = fmtCoins(store.getCoins(i.nexus_id, i.invoker.id).balance);
   return i.reply(prize
-    ? say('🎟️ Lottery win!', `<@${i.invoker.id}> won ${fmtCoins(prize)}! 🎉`, OK)
-    : say('🎟️ Lottery', 'No luck this time. Better luck next ticket!', BRAND));
+    ? say('🎟️ Lottery win!', `<@${i.invoker.id}> won ${fmtCoins(prize)}! 🎉\nBalance: ${newBal}`, OK)
+    : say('🎟️ Lottery', `No luck this time. Better luck next ticket!\nBalance: ${newBal}`, BRAND));
 });
 
 // /blackjack — a simplified hit/stand game vs the dealer, wagering coins.
@@ -3065,17 +3066,15 @@ function automodPanel(nexusId) {
   return {
     embeds: [{
       title: '🤖 AutoMod',
-      description: [
-        `**Spam guard:** ${f.spam ? '✅ on' : '❌ off'}`,
-        `**Caps guard:** ${f.caps ? '✅ on' : '❌ off'}`,
-        `**Max mentions:** ${f.maxMentions > 0 ? f.maxMentions : 'off'}`,
-        `**Banned words:** ${words.length} (set with /automod-words)`,
-        '',
-        `**On a violation:** ${f.deleteMsg !== false ? 'delete message + ' : ''}**${ACTION_LABELS[action]}**`,
-        '',
-        'Tap a guard to toggle it. Cycle the punishment and the delete toggle below. Every action is posted to the mod-log.',
-      ].join('\n'),
+      description: `On a violation: ${f.deleteMsg !== false ? 'delete message + ' : ''}**${ACTION_LABELS[action]}**.\nTap a guard to toggle it, cycle the punishment and delete toggle below. Every action is posted to the mod-log.`,
       color: BRAND,
+      fields: [
+        { name: 'Spam guard', value: f.spam ? '✅ On' : '❌ Off', inline: true },
+        { name: 'Caps guard', value: f.caps ? '✅ On' : '❌ Off', inline: true },
+        { name: 'Max mentions', value: f.maxMentions > 0 ? String(f.maxMentions) : 'Off', inline: true },
+        { name: 'Banned words', value: `${words.length} (/automod-words)`, inline: true },
+      ],
+      footer: { text: 'Velixar · AutoMod' },
     }],
     components: [
       { components: [
