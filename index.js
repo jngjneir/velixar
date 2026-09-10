@@ -3893,8 +3893,8 @@ aero.prefixCommand('*', (ctx) => {
 async function dispatchPrefix(ev) {
   const m = ev?.data?.message;
   const text = m?.text ?? m?.content ?? '';
-  if (!text || m?.is_aero) return;
   const px = prefixOf(ev.nexus_id);
+  if (!text || m?.is_aero) return;
   if (!text.startsWith(px)) return;
   const rest = text.slice(px.length).trim();
   if (!rest) return;
