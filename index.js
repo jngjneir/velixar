@@ -725,9 +725,30 @@ const vote = (i, choice) => {
 aero.component('poll:yes', (i) => vote(i, 'yes'));
 aero.component('poll:no', (i) => vote(i, 'no'));
 
-aero.command('coinflip', (i) => {
+// Animate a coin flip: edit the message a few times so the coin visibly spins
+// (alternating faces) before landing. Returns the landed side. `onLand` builds
+// the final embed. Best-effort — if an edit fails the result still shows.
+async function animateFlip(i, title, onLand) {
+  const heads = Math.random() < 0.5;
+  const side = heads ? 'Heads' : 'Tails';
+  const res = await i.reply(say(title, '🪙 Flipping…', BRAND));
+  const mid = res?.message?.id;
+  if (!mid) return side;
+  const faces = ['🪙', '🌕', '🪙', '🌑', '🪙', '🌕'];
+  for (let n = 0; n < faces.length; n++) {
+    await new Promise((r) => setTimeout(r, 220));
+    await aero.editMessage(i.nexus_id, i.space_id, mid, say(title, `${faces[n]} Flipping…`, BRAND)).catch(() => {});
+  }
+  await new Promise((r) => setTimeout(r, 260));
+  await aero.editMessage(i.nexus_id, i.space_id, mid, onLand(heads, side)).catch(() => {});
+  return side;
+}
+
+aero.command('coinflip', async (i) => {
   if (!on(i.nexus_id, 'fun')) return i.replyEphemeral('The Fun module is off in this Nexus.');
-  return i.reply(`🪙 ${i.invoker.name} flipped **${Math.random() < 0.5 ? 'Heads' : 'Tails'}**.`);
+  await animateFlip(i, '🪙 Coin flip', (heads, side) =>
+    say('🪙 Coin flip', `${heads ? '🌕' : '🌑'} ${i.invoker.name} flipped **${side}**!`, OK));
+  return undefined;
 });
 
 // /choose a, b, c — pick one of a comma-separated list. Uses a modal so the
@@ -1005,7 +1026,11 @@ const WYR = [
 const TOD = ['Truth: what is your most-used app?', 'Dare: send the last emoji you used, ten times.', 'Truth: what is a hobby you want to start?', 'Dare: type your message backwards for the next minute.'];
 aero.command('wouldyourather', (i) => funGate(i) ? i.reply(say('🤔 Would you rather', `Would you rather ${pick(WYR)}`, BRAND)) : i.replyEphemeral('The Fun module is off in this Nexus.'));
 aero.command('truthordare', (i) => funGate(i) ? i.reply(say('🎭 Truth or Dare', pick(TOD))) : i.replyEphemeral('The Fun module is off in this Nexus.'));
-aero.command('flip', (i) => funGate(i) ? i.reply(`🪙 **${Math.random() < 0.5 ? 'Heads' : 'Tails'}**`) : i.replyEphemeral('The Fun module is off in this Nexus.'));
+aero.command('flip', async (i) => {
+  if (!funGate(i)) return i.replyEphemeral('The Fun module is off in this Nexus.');
+  await animateFlip(i, '🪙 Flip', (heads, side) => say('🪙 Flip', `${heads ? '🌕' : '🌑'} **${side}**`, OK));
+  return undefined;
+});
 aero.command('randomcolor', (i) => {
   if (!funGate(i)) return i.replyEphemeral('The Fun module is off in this Nexus.');
   const hex = '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0');
@@ -1022,19 +1047,7 @@ aero.command('slots', async (i) => {
   if (!funGate(i)) return i.replyEphemeral('The Fun module is off in this Nexus.');
   const r = [spin(), spin(), spin()];
   const won = r[0] === r[1] && r[1] === r[2];
-  // Reveal one reel at a time so it feels like the wheels stopping in turn.
-  const res = await i.reply(say('🎰 Slots', '[ 🎰 | 🎰 | 🎰 ]\n\nSpinning…', BRAND));
-  const mid = res?.message?.id;
-  if (!mid) return undefined;
-  const frames = [
-    `[ ${r[0]} | 🎰 | 🎰 ]\n\nSpinning…`,
-    `[ ${r[0]} | ${r[1]} | 🎰 ]\n\nSpinning…`,
-    `[ ${r[0]} | ${r[1]} | ${r[2]} ]\n\n${won ? 'Jackpot! 🎉🎉🎉' : 'No match, try again!'}`,
-  ];
-  for (let n = 0; n < frames.length; n++) {
-    await new Promise((res2) => setTimeout(res2, 700));
-    await aero.editMessage(i.nexus_id, i.space_id, mid, say('🎰 Slots', frames[n], n === 2 ? (won ? OK : BRAND) : BRAND)).catch(() => {});
-  }
+  await animateSlots(i, '🎰 Slots', r, won ? 'Jackpot! 🎉🎉🎉' : 'No match, try again!', won ? OK : BRAND);
   return undefined;
 });
 const INSPIRE = [
@@ -1489,13 +1502,41 @@ aero.component('mr:submit', (i) => {
 });
 
 // /slotmachine — a free (non-coin) 3-reel spin for fun.
-aero.command('slotmachine', (i) => {
+// Animate a 3-reel slot spin: reels blur while spinning, then stop left-to-right.
+// `r` is the pre-decided result; `finalLine` is the result text under the reels.
+async function animateSlots(i, title, r, finalLine, color) {
+  const REELS = ['🍒', '🍋', '🔔', '⭐', '💎', '7️⃣'];
+  const blur = () => pick(REELS);
+  const res = await i.reply(say(title, `[ ${blur()} | ${blur()} | ${blur()} ]\n\nSpinning…`, BRAND));
+  const mid = res?.message?.id;
+  if (!mid) return;
+  // A few all-blur frames so the reels visibly spin.
+  for (let f = 0; f < 3; f++) {
+    await new Promise((res2) => setTimeout(res2, 260));
+    await aero.editMessage(i.nexus_id, i.space_id, mid, say(title, `[ ${blur()} | ${blur()} | ${blur()} ]\n\nSpinning…`, BRAND)).catch(() => {});
+  }
+  // Stop each reel in turn.
+  const stops = [
+    `[ ${r[0]} | ${blur()} | ${blur()} ]\n\nSpinning…`,
+    `[ ${r[0]} | ${r[1]} | ${blur()} ]\n\nSpinning…`,
+    `[ ${r[0]} | ${r[1]} | ${r[2]} ]\n\n${finalLine}`,
+  ];
+  for (let n = 0; n < stops.length; n++) {
+    await new Promise((res2) => setTimeout(res2, 600));
+    await aero.editMessage(i.nexus_id, i.space_id, mid, say(title, stops[n], n === 2 ? color : BRAND)).catch(() => {});
+  }
+}
+
+aero.command('slotmachine', async (i) => {
   if (!gameGate(i)) return i.replyEphemeral('The Games module is off in this Nexus.');
   const REELS = ['🍒', '🍋', '🔔', '⭐', '💎', '7️⃣'];
   const r = [0, 0, 0].map(() => pick(REELS));
   const win = r[0] === r[1] && r[1] === r[2];
   if (win) awardXp(i, 8);
-  return i.reply(say('🎰 Slots', `[ ${r.join(' | ')} ]\n\n${win ? `**JACKPOT!** 🎉${on(i.nexus_id, 'levels') ? ' (+8 XP)' : ''}` : 'No match · spin again!'}`, win ? OK : BRAND));
+  await animateSlots(i, '🎰 Slots', r,
+    win ? `**JACKPOT!** 🎉${on(i.nexus_id, 'levels') ? ' (+8 XP)' : ''}` : 'No match · spin again!',
+    win ? OK : BRAND);
+  return undefined;
 });
 
 // /rps-lizard — extended rock-paper-scissors-lizard-spock vs Velixar.
@@ -1855,14 +1896,21 @@ aero.command('coinflip-bet', (i) => {
   return inlineText(i, (v) => doCoinBet(i, v), () => aero.openModal(i.nexus_id, i.invoker.id, { title: 'Coinflip bet', custom_id: 'eco:coinbet', inputs: [{ id: 'bet', label: 'Bet amount', style: 'short', required: true, placeholder: '100' }] }, { spaceId: i.space_id }));
 });
 aero.component('eco:coinbet', (i) => doCoinBet(i, i.fields?.bet || ''));
-function doCoinBet(i, raw) {
+async function doCoinBet(i, raw) {
   const bet = parseInt(String(raw).trim(), 10);
   if (!Number.isFinite(bet) || bet < 1) return i.replyEphemeral('Enter a positive bet, e.g. `/coinflip-bet 100`.');
   const bal = store.getCoins(i.nexus_id, i.invoker.id).balance;
   if (bet > bal) return i.replyEphemeral("You can't bet more than you have.");
-  const win = Math.random() < 0.5;
-  store.addCoins(i.nexus_id, i.invoker.id, win ? bet : -bet);
-  return i.reply(say(win ? '🪙 Heads, you win!' : '🪙 Tails, you lose', win ? `You won ${fmtCoins(bet)}.` : `You lost ${fmtCoins(bet)}.`, win ? OK : DANGER_C));
+  // Heads wins. animateFlip spins the coin, then we settle on the landed side.
+  await animateFlip(i, '🪙 Coinflip bet', (heads) => {
+    store.addCoins(i.nexus_id, i.invoker.id, heads ? bet : -bet);
+    return say(
+      heads ? '🪙 Heads · you win!' : '🪙 Tails · you lose',
+      heads ? `You won ${fmtCoins(bet)}.` : `You lost ${fmtCoins(bet)}.`,
+      heads ? OK : DANGER_C,
+    );
+  });
+  return undefined;
 }
 
 // /lottery — buy a ticket (50 coins) for a chance at a jackpot.
@@ -2099,17 +2147,29 @@ function openRoulette(i, raw) {
     ] }],
   });
 }
-function handleRoulette(i) {
+async function handleRoulette(i) {
   const [, colour, betStr] = i.custom_id.split(':');
   const bet = parseInt(betStr, 10);
   if ((store.getCoins(i.nexus_id, i.invoker.id).balance || 0) < bet) return i.replyEphemeral(`You no longer have ${fmtCoins(bet)}.`);
   const r = Math.random();
   const landed = r < 1 / 37 ? 'green' : r < 0.5 + 0.5 / 37 ? 'red' : 'black';
+  const EMO = { red: '🔴', black: '⚫', green: '🟢' };
+  // Spin the wheel: cycle the ball through colours before it settles. First edit
+  // via update() (removes the buttons), the rest via editMessage on the same id.
+  await i.update(say('🎡 Roulette', `The wheel is spinning…\n\n🔴 ⚫ 🔴 ⚫ 🟢`, BRAND));
+  const seq = ['red', 'black', 'red', 'black', 'green', 'red', 'black'];
+  for (let n = 0; n < seq.length; n++) {
+    await new Promise((res) => setTimeout(res, 240));
+    await aero.editMessage(i.nexus_id, i.space_id, i.message_id, say('🎡 Roulette', `Spinning…  ${EMO[seq[n]]}`, BRAND)).catch(() => {});
+  }
   const mult = landed === colour ? (landed === 'green' ? 14 : 2) : 0;
   const delta = mult ? bet * (mult - 1) : -bet;
   store.addCoins(i.nexus_id, i.invoker.id, delta);
-  const emoji = { red: '🔴', black: '⚫', green: '🟢' }[landed];
-  return i.update(say('🎡 Roulette', `The ball landed on ${emoji} **${landed}**.\n${mult ? `You won ${fmtCoins(bet * mult)}! (${mult}×)` : `You lost ${fmtCoins(bet)}.`}`, mult ? OK : DANGER_C));
+  await new Promise((res) => setTimeout(res, 300));
+  await aero.editMessage(i.nexus_id, i.space_id, i.message_id, say('🎡 Roulette',
+    `The ball landed on ${EMO[landed]} **${landed}**.\n${mult ? `You won ${fmtCoins(bet * mult)}! (${mult}×)` : `You lost ${fmtCoins(bet)}.`}`,
+    mult ? OK : DANGER_C)).catch(() => {});
+  return undefined;
 }
 
 // /dice-bet — bet on high/low of a single d6.
@@ -2132,14 +2192,25 @@ function openDiceBet(i, raw) {
     ] }],
   });
 }
-function handleDiceBet(i) {
+async function handleDiceBet(i) {
   const [, pick, betStr] = i.custom_id.split(':');
   const bet = parseInt(betStr, 10);
   if ((store.getCoins(i.nexus_id, i.invoker.id).balance || 0) < bet) return i.replyEphemeral(`You no longer have ${fmtCoins(bet)}.`);
   const roll = 1 + Math.floor(Math.random() * 6);
+  const DIE = ['⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+  // Tumble the die a few times before it settles.
+  await i.update(say('🎲 Dice bet', 'Rolling…  🎲', BRAND));
+  for (let n = 0; n < 5; n++) {
+    await new Promise((res) => setTimeout(res, 200));
+    await aero.editMessage(i.nexus_id, i.space_id, i.message_id, say('🎲 Dice bet', `Rolling…  ${DIE[Math.floor(Math.random() * 6)]}`, BRAND)).catch(() => {});
+  }
   const win = (pick === 'low' && roll <= 3) || (pick === 'high' && roll >= 4);
   store.addCoins(i.nexus_id, i.invoker.id, win ? bet : -bet);
-  return i.update(say('🎲 Dice bet', `The die shows **${roll}**.\n${win ? `You won ${fmtCoins(bet * 2)}!` : `You lost ${fmtCoins(bet)}.`}`, win ? OK : DANGER_C));
+  await new Promise((res) => setTimeout(res, 280));
+  await aero.editMessage(i.nexus_id, i.space_id, i.message_id, say('🎲 Dice bet',
+    `The die shows ${DIE[roll - 1]} **${roll}**.\n${win ? `You won ${fmtCoins(bet * 2)}!` : `You lost ${fmtCoins(bet)}.`}`,
+    win ? OK : DANGER_C)).catch(() => {});
+  return undefined;
 }
 
 // /sell — sell a shop item back for half its price.
