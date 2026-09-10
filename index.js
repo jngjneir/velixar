@@ -52,7 +52,16 @@ const BRAND = '#5865F2';
 const OK = '#22C55E';
 const WARN_C = '#F59E0B';
 const DANGER_C = '#EF4444';
-const say = (title, description, color = BRAND) => ({ embeds: [{ title, description, color }] });
+
+// Every Velixar embed carries the same quiet footer, so 160+ replies read as one
+// cohesive, on-brand voice instead of bare title+description cards. `say()` is
+// the workhorse used across the whole file; keeping the polish here upgrades
+// every command at once. Pass a 4th arg `false` to drop the footer for a reply
+// that already has its own (e.g. paginated lists, game boards).
+const BRAND_FOOTER = 'Velixar';
+const say = (title, description, color = BRAND, footer = true) => ({
+  embeds: [{ title, description, color, ...(footer ? { footer: { text: BRAND_FOOTER } } : {}) }],
+});
 
 // Rich embed builder for a consistent, polished look: optional thumbnail,
 // fields, footer and an ISO timestamp. Keeps every command's card on-brand.
@@ -390,7 +399,7 @@ aero.command('leaderboard', (i) => {
   if (!rows.length) return i.reply(say('🏆 Leaderboard', 'No XP earned yet. Start chatting to climb!'));
   const items = rows.map((r, idx) => {
     const rank = MEDALS[idx] || `**${idx + 1}.**`;
-    return `${rank} <@${r.user_id}> — **${r.points}** XP · lvl ${levelFor(r.points)}`;
+    return `${rank} <@${r.user_id}>. **${r.points}** XP · lvl ${levelFor(r.points)}`;
   });
   const you = store.getXp(i.nexus_id, i.invoker.id);
   return replyPaged(i, { items, perPage: 10, title: '🏆 Top members', footer: `You: ${you} XP (lvl ${levelFor(you)})` });
@@ -432,8 +441,8 @@ aero.command('progress', (i) => {
 aero.command('top', (i) => {
   if (!on(i.nexus_id, 'levels')) return i.replyEphemeral('The Levels module is off in this Nexus.');
   const rows = store.topXp(i.nexus_id, 5);
-  if (!rows.length) return i.reply(say('🏆 Top 5', 'No XP yet — start chatting!'));
-  const body = rows.map((r, n) => `${MEDALS[n] || `**${n + 1}.**`} <@${r.user_id}> — **${r.points}** XP`).join('\n');
+  if (!rows.length) return i.reply(say('🏆 Top 5', 'No XP yet · start chatting!'));
+  const body = rows.map((r, n) => `${MEDALS[n] || `**${n + 1}.**`} <@${r.user_id}>. **${r.points}** XP`).join('\n');
   return i.reply(say('🏆 Top 5', body));
 });
 
@@ -1088,7 +1097,7 @@ aero.command('velitop', (i) => {
   if (!funGate(i)) return i.replyEphemeral('The Fun module is off in this Nexus.');
   const rows = store.topVeli(i.nexus_id, 50);
   if (!rows.length) return i.reply(say('veli leaderboard', 'No one has said veli yet. Try it!'));
-  const items = rows.map((r, n) => `${MEDALS[n] || `**${n + 1}.**`} <@${r.user_id}> — **${r.count}** velis`);
+  const items = rows.map((r, n) => `${MEDALS[n] || `**${n + 1}.**`} <@${r.user_id}>. **${r.count}** velis`);
   return replyPaged(i, { items, perPage: 10, title: '✨ Top veli-sayers' });
 });
 
@@ -1349,7 +1358,7 @@ aero.component('gn:submit', (i) => {
   if (g === s.target) {
     guessState.delete(key);
     awardXp(i, 15);
-    return i.reply(say('🎉 Correct!', `**${s.target}** it was — you got it in **${s.tries}** tries.${on(i.nexus_id, 'levels') ? ' (+15 XP)' : ''}`, OK));
+    return i.reply(say('🎉 Correct!', `**${s.target}** it was · you got it in **${s.tries}** tries.${on(i.nexus_id, 'levels') ? ' (+15 XP)' : ''}`, OK));
   }
   return i.replyEphemeral(say('🔢 Keep going', `**${g}** is too ${g < s.target ? 'low ⬆️' : 'high ⬇️'}. (try ${s.tries})`, WARN_C));
 });
@@ -1374,7 +1383,7 @@ function hlView(current, streak) {
 }
 function handleHL(i) {
   const s = hlState.get(String(i.message_id));
-  if (!s) return i.replyEphemeral('This game has ended — start a new /higherlower.');
+  if (!s) return i.replyEphemeral('This game has ended · start a new /higherlower.');
   const next = 1 + Math.floor(Math.random() * 100);
   const pick = i.custom_id.split(':')[1];
   const correct = (pick === 'high' && next >= s.current) || (pick === 'low' && next <= s.current);
@@ -1435,7 +1444,7 @@ aero.component('ana:submit', (i) => {
   if (!word) return i.replyEphemeral('Start a new /anagram.');
   const g = String(i.fields?.w || '').trim().toLowerCase();
   if (g === word) { anagramState.delete(key); awardXp(i, 12); return i.reply(say('✅ Correct', `It was **${word}**!${on(i.nexus_id, 'levels') ? ' (+12 XP)' : ''}`, OK)); }
-  return i.replyEphemeral(say('❌ Not quite', 'Try again — press Answer.', WARN_C));
+  return i.replyEphemeral(say('❌ Not quite', 'Try again · press Answer.', WARN_C));
 });
 
 // /mathrace — solve a quick sum against the clock (single question).
@@ -1460,7 +1469,7 @@ aero.component('mr:submit', (i) => {
   if (!s) return i.replyEphemeral('Start a new /mathrace.');
   const g = parseInt(i.fields?.n, 10);
   if (g === s.answer) { mathRace.delete(key); const secs = ((Date.now() - s.at) / 1000).toFixed(1); awardXp(i, 10); return i.reply(say('⚡ Correct', `Solved in **${secs}s**!${on(i.nexus_id, 'levels') ? ' (+10 XP)' : ''}`, OK)); }
-  return i.replyEphemeral(say('❌ Wrong', 'Not the right number — press Answer to retry.', WARN_C));
+  return i.replyEphemeral(say('❌ Wrong', 'Not the right number · press Answer to retry.', WARN_C));
 });
 
 // /slotmachine — a free (non-coin) 3-reel spin for fun.
@@ -1470,7 +1479,7 @@ aero.command('slotmachine', (i) => {
   const r = [0, 0, 0].map(() => pick(REELS));
   const win = r[0] === r[1] && r[1] === r[2];
   if (win) awardXp(i, 8);
-  return i.reply(say('🎰 Slots', `[ ${r.join(' | ')} ]\n\n${win ? `**JACKPOT!** 🎉${on(i.nexus_id, 'levels') ? ' (+8 XP)' : ''}` : 'No match — spin again!'}`, win ? OK : BRAND));
+  return i.reply(say('🎰 Slots', `[ ${r.join(' | ')} ]\n\n${win ? `**JACKPOT!** 🎉${on(i.nexus_id, 'levels') ? ' (+8 XP)' : ''}` : 'No match · spin again!'}`, win ? OK : BRAND));
 });
 
 // /rps-lizard — extended rock-paper-scissors-lizard-spock vs Velixar.
@@ -1521,7 +1530,7 @@ aero.component('eq:submit', (i) => {
   if (!answer) return i.replyEphemeral('Start a new /emojiquiz.');
   const g = String(i.fields?.a || '').trim().toLowerCase();
   if (g.includes(answer) || answer.includes(g)) { emojiQuizState.delete(key); awardXp(i, 10); return i.reply(say('✅ Correct', `It was **${answer}**!${on(i.nexus_id, 'levels') ? ' (+10 XP)' : ''}`, OK)); }
-  return i.replyEphemeral(say('❌ Nope', 'Try again — press Answer.', WARN_C));
+  return i.replyEphemeral(say('❌ Nope', 'Try again · press Answer.', WARN_C));
 });
 
 // /reactiontest — click the button as fast as you can.
@@ -1768,7 +1777,7 @@ const SHOP = [
 ];
 aero.command('shop', (i) => {
   if (!ecoGate(i)) return i.replyEphemeral('The Economy module is off in this Nexus.');
-  const body = SHOP.map((s) => `${s.emoji} **${s.name}** — ${fmtCoins(s.price)}\n${s.desc}`).join('\n\n');
+  const body = SHOP.map((s) => `${s.emoji} **${s.name}**. ${fmtCoins(s.price)}\n${s.desc}`).join('\n\n');
   return i.reply({ embeds: [{ title: '🛒 Shop', description: `${body}\n\nBuy with \`/buy <item>\`.`, color: BRAND, footer: { text: `Your balance: ${store.getCoins(i.nexus_id, i.invoker.id).balance} coins` } }] });
 });
 const doBuy = (i, raw) => {
@@ -1942,7 +1951,7 @@ function gatherCmd(name, { title, cooldownMs, table, emoji }) {
     const last = store.ecoCooldown(i.nexus_id, i.invoker.id, name);
     if (now - last < cooldownMs) {
       const wait = Math.ceil((cooldownMs - (now - last)) / 1000);
-      return i.replyEphemeral(say(title, `Rest a moment — try again in **${wait}s**.`, WARN_C));
+      return i.replyEphemeral(say(title, `Rest a moment · try again in **${wait}s**.`, WARN_C));
     }
     store.markEco(i.nexus_id, i.invoker.id, name, now);
     const roll = table[Math.floor(Math.random() * table.length)];
@@ -1956,7 +1965,7 @@ gatherCmd('fish', { title: 'Fishing', emoji: '🎣', cooldownMs: 30000, table: [
   { text: 'A bucket of shrimp.', coins: 30 },
 ] });
 gatherCmd('hunt', { title: 'Hunting', emoji: '🏹', cooldownMs: 30000, table: [
-  { text: 'You bagged a rabbit.', coins: 25 }, { text: 'A wild boar — nice!', coins: 80 },
+  { text: 'You bagged a rabbit.', coins: 25 }, { text: 'A wild boar · nice!', coins: 80 },
   { text: 'A legendary stag! 🦌', coins: 150 }, { text: 'You came back empty-handed.', coins: 0 },
   { text: 'A brace of pheasants.', coins: 40 },
 ] });
@@ -1973,12 +1982,12 @@ aero.command('weekly', (i) => {
   const last = store.ecoCooldown(i.nexus_id, i.invoker.id, 'weekly');
   if (now - last < WEEK) {
     const days = Math.ceil((WEEK - (now - last)) / 86400000);
-    return i.replyEphemeral(say('📅 Weekly', `Already claimed — come back in **${days} day(s)**.`, WARN_C));
+    return i.replyEphemeral(say('📅 Weekly', `Already claimed · come back in **${days} day(s)**.`, WARN_C));
   }
   store.markEco(i.nexus_id, i.invoker.id, 'weekly', now);
   const reward = 500 + Math.floor(Math.random() * 500);
   store.addCoins(i.nexus_id, i.invoker.id, reward);
-  return i.reply(say('📅 Weekly bonus', `+${fmtCoins(reward)} — see you next week!`, OK));
+  return i.reply(say('📅 Weekly bonus', `+${fmtCoins(reward)} · see you next week!`, OK));
 });
 
 // /richest — the coin leaderboard (wallet + bank).
@@ -2017,7 +2026,7 @@ function openRoulette(i, raw) {
   if (!Number.isFinite(bet) || bet <= 0) return i.replyEphemeral('Enter a positive bet, e.g. `/roulette 100`.');
   if ((store.getCoins(i.nexus_id, i.invoker.id).balance || 0) < bet) return i.replyEphemeral(`You don't have ${fmtCoins(bet)}.`);
   return i.reply({
-    embeds: [{ title: '🎡 Roulette', description: `Bet: ${fmtCoins(bet)}\nPick a colour — red/black pay 2×, green pays 14×.`, color: BRAND }],
+    embeds: [{ title: '🎡 Roulette', description: `Bet: ${fmtCoins(bet)}\nPick a colour · red/black pay 2×, green pays 14×.`, color: BRAND }],
     components: [{ components: [
       { type: 'button', style: 'danger', label: 'Red', custom_id: `roul:red:${bet}` },
       { type: 'button', style: 'secondary', label: 'Black', custom_id: `roul:black:${bet}` },
@@ -2426,13 +2435,13 @@ aero.component('mod:purgeuser', async (i) => {
 
 // /modhelp — a focused moderator cheat-sheet.
 aero.command('modhelp', (i) => i.replyEphemeral(say('🛡️ Moderator commands',
-  ['`/warn` `/warnings` `/warnlist` `/unwarn` — warnings',
-   '`/timeout` `/tempmute` `/timeout-clear` — timeouts',
-   '`/kick` `/ban` `/softban` — removals',
-   '`/note` `/notes` `/notes-clear` — staff notes',
-   '`/lock` `/unlock` `/slowmode` `/slowmode-off` — spaces',
-   '`/purge` `/purge-user` — message cleanup',
-   '`/automod` `/automod-words` `/modlog-setup` `/modstats` — automation',
+  ['`/warn` `/warnings` `/warnlist` `/unwarn`. warnings',
+   '`/timeout` `/tempmute` `/timeout-clear`. timeouts',
+   '`/kick` `/ban` `/softban`. removals',
+   '`/note` `/notes` `/notes-clear`. staff notes',
+   '`/lock` `/unlock` `/slowmode` `/slowmode-off`. spaces',
+   '`/purge` `/purge-user`. message cleanup',
+   '`/automod` `/automod-words` `/modlog-setup` `/modstats`. automation',
   ].join('\n'))));
 
 // /lock and /unlock the current space.
@@ -2541,7 +2550,7 @@ aero.command('remindlist', (i) => {
   if (!list.length) return i.replyEphemeral(say('No reminders', 'You have no pending reminders. Set one with /remind.'));
   const body = list.map((r) => {
     const mins = Math.max(0, Math.round((r.due_at - Date.now()) / 60000));
-    return `• *${r.text}* — in **${mins}m**`;
+    return `• *${r.text}* · in **${mins}m**`;
   }).join('\n');
   return i.replyEphemeral({
     embeds: [{ title: '⏰ Your reminders', description: body, color: BRAND }],
@@ -3291,13 +3300,13 @@ aero.component('util:ts', (i) => doTs(i, i.fields?.mins || ''));
 // no inline @mention is given.
 aero.command('avatar', (i) => {
   const target = i.options?.user || i.invoker.id;
-  if (i.options?.user) return i.reply(say('🖼️ Avatar', `Avatar for <@${target}> — open their profile to view it full size.`));
+  if (i.options?.user) return i.reply(say('🖼️ Avatar', `Avatar for <@${target}> · open their profile to view it full size.`));
   return i.reply({
     embeds: [{ title: '🖼️ Avatar', description: 'Pick a member to view their avatar. (tip: `/avatar @name`)', color: BRAND }],
     components: [{ components: [{ type: 'select', kind: 'member', custom_id: 'util:avatar', placeholder: 'Pick a member', min: 1, max: 1 }] }],
   });
 });
-aero.component('util:avatar', (i) => i.update(say('🖼️ Avatar', `Avatar for <@${i.values?.[0]}> — open their profile to view it full size.`)));
+aero.component('util:avatar', (i) => i.update(say('🖼️ Avatar', `Avatar for <@${i.values?.[0]}> · open their profile to view it full size.`)));
 
 // /nexusinfo — a compact card about this Nexus.
 aero.command('nexusinfo', (i) => {
@@ -3320,7 +3329,7 @@ aero.command('roleinfo', (i) => i.reply({
   embeds: [{ title: '🎭 Role info', description: 'Pick a role to inspect.', color: BRAND }],
   components: [{ components: [{ type: 'select', kind: 'role', custom_id: 'util:roleinfo', placeholder: 'Pick a role', min: 1, max: 1 }] }],
 }));
-aero.component('util:roleinfo', (i) => i.update(say('🎭 Role info', `Role <@&${i.values?.[0]}> — self-assignable via /roles if the owner added it there.`)));
+aero.component('util:roleinfo', (i) => i.update(say('🎭 Role info', `Role <@&${i.values?.[0]}> · self-assignable via /roles if the owner added it there.`)));
 
 // /membercount — quick tracked-member count.
 aero.command('membercount', (i) => i.replyEphemeral(say('👥 Members', `**${store.xpStats(i.nexus_id).members}** members have earned XP so far in this Nexus.`)));
@@ -3333,7 +3342,7 @@ const doSnowflake = (i, raw) => {
     const ts = Number((BigInt(id) >> 22n) + 1420070400000n);
     return i.replyEphemeral(say('❄️ Snowflake', `\`${id}\` was created around **${new Date(ts).toLocaleString()}**.`));
   }
-  return i.replyEphemeral(say('❄️ Snowflake', `\`${id}\` is not a numeric snowflake — Ballastra ids are UUIDs and carry no embedded timestamp.`, WARN_C));
+  return i.replyEphemeral(say('❄️ Snowflake', `\`${id}\` is not a numeric snowflake. Ballastra ids are UUIDs and carry no embedded timestamp.`, WARN_C));
 };
 aero.command('snowflake', (i) => inlineText(i, (v) => doSnowflake(i, v), () => aero.openModal(i.nexus_id, i.invoker.id, {
   title: 'Snowflake', custom_id: 'util:snowflake',
@@ -3516,23 +3525,27 @@ const HELP_CATEGORIES = [
     ['announce', 'Post an announcement'], ['embed', 'Build an embed'], ['count-status', 'Counting status'],
   ] },
 ];
+// Total commands across the help categories, computed once for the landing card.
+const HELP_TOTAL = HELP_CATEGORIES.reduce((n, c) => n + c.cmds.length, 0);
+
 function helpLanding() {
   return {
     embeds: [{
       title: '📖 Velixar Help',
       description: [
-        `**200 commands** across **${HELP_CATEGORIES.length} categories**. Pick a category below to see its commands.`,
+        `**${HELP_TOTAL} commands** across **${HELP_CATEGORIES.length} categories**. Pick a category below to browse.`,
         '',
-        ...HELP_CATEGORIES.map((c) => `${c.emoji} **${c.label}** — ${c.desc}`),
+        // Each category shows its command count, so the menu reads at a glance.
+        ...HELP_CATEGORIES.map((c) => `${c.emoji} **${c.label}**  ·  ${c.cmds.length} commands`),
         '',
-        '_Tip: type a command name after `/` and Velixar guides you with an inline argument hint._',
+        '_Tip: type a command name after `/` and Velixar shows an inline argument hint._',
       ].join('\n'),
       color: BRAND,
-      footer: { text: 'Velixar · all-in-one Aero' },
+      footer: { text: `Velixar · ${HELP_TOTAL} commands` },
     }],
     components: [{ components: [{
       type: 'select', kind: 'string', custom_id: 'help:cat', placeholder: 'Browse a category',
-      options: HELP_CATEGORIES.map((c) => ({ label: c.label, value: c.key, description: c.desc, emoji: c.emoji })),
+      options: HELP_CATEGORIES.map((c) => ({ label: `${c.label} (${c.cmds.length})`, value: c.key, description: c.desc, emoji: c.emoji })),
     }] }],
   };
 }
@@ -3541,13 +3554,19 @@ function helpCategory(key) {
   return {
     embeds: [{
       title: `${c.emoji} ${c.label}`,
-      description: c.cmds.map(([name, d]) => `\`/${name}\` — ${d}`).join('\n'),
+      // `desc` is the category's one-liner; command lines use a middot, never an
+      // em-dash, to match Ballastra's copy style.
+      description: [
+        `_${c.desc}_`,
+        '',
+        ...c.cmds.map(([name, d]) => `\`/${name}\`  ·  ${d}`),
+      ].join('\n'),
       color: BRAND,
       footer: { text: `${c.cmds.length} commands · pick another category below` },
     }],
     components: [{ components: [{
       type: 'select', kind: 'string', custom_id: 'help:cat', placeholder: 'Browse a category',
-      options: HELP_CATEGORIES.map((x) => ({ label: x.label, value: x.key, description: x.desc, emoji: x.emoji, default: x.key === c.key })),
+      options: HELP_CATEGORIES.map((x) => ({ label: `${x.label} (${x.cmds.length})`, value: x.key, description: x.desc, emoji: x.emoji, default: x.key === c.key })),
     }] }],
   };
 }
