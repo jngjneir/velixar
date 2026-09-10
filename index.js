@@ -3878,7 +3878,7 @@ aero.prefixCommand('daily', (ctx) => {
 aero.prefixCommand('rich', (ctx) => {
   if (!pOn(ctx, 'economy')) return ctx.reply('The Economy module is off in this Nexus.');
   const rows = store.topCoins(ctx.nexus_id, 10);
-  if (!rows.length) return ctx.reply(say('💰 Richest', 'No one has coins yet. Try !work!'));
+  if (!rows.length) return ctx.reply(say('💰 Richest', `No one has coins yet. Try \`${prefixOf(ctx.nexus_id)}work\`!`));
   const body = rows.map((r, n) => `${MEDALS[n] || `**${n + 1}.**`} <@${r.user_id}> · ${fmtCoins(r.balance)}`).join('\n');
   return ctx.reply(say('💰 Richest members', body));
 });
@@ -3888,7 +3888,7 @@ for (const [name, emoji, verb] of [['hug', '🤗', 'hug'], ['pat', '👋', 'pat'
   aero.prefixCommand(name, (ctx) => {
     if (!pOn(ctx, 'fun')) return ctx.reply('The Fun module is off in this Nexus.');
     const target = pMention(ctx);
-    if (!target) return ctx.reply(`Mention someone: \`!${name} @member\`.`);
+    if (!target) return ctx.reply(`Mention someone: \`${prefixOf(ctx.nexus_id)}${name} @member\`.`);
     const gif = gifFor(name);
     return ctx.reply({ embeds: [{ description: `${emoji} <@${ctx.invoker.id}> ${verb}s <@${target}>!`, color: BRAND, ...(gif ? { image: { url: gif } } : {}) }] });
   });
