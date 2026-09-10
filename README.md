@@ -1,6 +1,6 @@
 # Velixar
 
-An all-in-one Ballastra Aero with **over 100 commands**. **One Aero, many
+An all-in-one Ballastra Aero with **200 commands**. **One Aero, many
 Nexuses**: each Nexus owner turns modules on or off and configures Velixar for
 their own Nexus, from inside it. Nothing is hard-coded to a single Nexus.
 
