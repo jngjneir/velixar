@@ -3794,7 +3794,21 @@ const pMention = (ctx) => { const m = (ctx.text || '').match(/<@!?([a-zA-Z0-9_-]
 // the SDK's single global prefix. prefixCommand() still registers handlers into
 // aero._prefixHandlers; our own message.created dispatch (below, in the main
 // handler) reads the Nexus's configured prefix and routes to those handlers.
-const prefixOf = (nexusId) => (cfg(nexusId).prefix || '!');
+//
+// An in-memory cache backs the store so a /prefix change takes effect on the
+// VERY NEXT message with zero dependency on read timing — setPrefix() updates
+// the cache and the store together.
+const prefixCache = new Map(); // nexusId -> prefix
+function prefixOf(nexusId) {
+  if (prefixCache.has(nexusId)) return prefixCache.get(nexusId);
+  const px = cfg(nexusId).prefix || '!';
+  prefixCache.set(nexusId, px);
+  return px;
+}
+function setPrefix(nexusId, px) {
+  prefixCache.set(nexusId, px);           // instant, no read needed next message
+  store.setConfig(nexusId, { prefix: px }); // persist for restarts
+}
 
 aero.prefixCommand('ping', (ctx) => ctx.reply(say('🏓 Pong', 'Velixar is online and responding.', OK)));
 aero.prefixCommand('help', (ctx) => ctx.reply(helpLanding()));
@@ -3927,8 +3941,8 @@ aero.command('prefix', (i) => {
   }
   // Keep it short + symbol-ish so it can't collide with normal chat.
   if (val.length > 3) return i.replyEphemeral('A prefix must be 1 to 3 characters, e.g. `!`, `?`, `>>`.');
-  store.setConfig(i.nexus_id, { prefix: val });
-  return i.replyEphemeral(say('✅ Prefix updated', `Velixar now responds to \`${val}command\` in this Nexus (for example \`${val}ping\`). Slash commands still work too.`, OK));
+  setPrefix(i.nexus_id, val);
+  return i.replyEphemeral(say('✅ Prefix updated', `Velixar now responds to \`${val}command\` in this Nexus (for example \`${val}ping\`). This takes effect right away. Slash commands still work too.`, OK));
 });
 
 // Recover after a restart: re-arm timers for giveaways that were still running.
