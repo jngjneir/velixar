@@ -11,7 +11,7 @@
     "giveaways",
     "utility"
   ],
-  "visibility": "private",
+  "visibility": "public",
   "events": [
     "member.joined",
     "member.left",

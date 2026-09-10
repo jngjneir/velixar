@@ -4,9 +4,10 @@ An all-in-one Ballastra Aero with **200 commands**. **One Aero, many
 Nexuses**: each Nexus owner turns modules on or off and configures Velixar for
 their own Nexus, from inside it. Nothing is hard-coded to a single Nexus.
 
-> **Private Aero.** Velixar is a private Aero owned by **Saith**, founder of
-> Ballastra. It is not published to the public Aero directory (`visibility:
-> private`); it is installed into Nexuses by invitation.
+> **Ownership.** Velixar is a **public** Aero — anyone can install and use it in
+> their own Nexus. It is **privately owned by Saith** as an individual, and run
+> personally; it is not owned by any organisation or platform, and is not a
+> Ballastra business venture.
 
 Sixteen toggle-able modules (Nexus settings → Aeros → Velixar → Modules) plus a
 large set of always-on fun and utility commands. The full, authoritative command
