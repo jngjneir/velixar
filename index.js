@@ -3720,6 +3720,106 @@ function helpCategory(key) {
 aero.command('help', (i) => i.replyEphemeral(helpLanding()));
 aero.component('help:cat', (i) => i.update(helpCategory(i.values?.[0])));
 
+// ─────────────────────────────────────────────────────────────
+// PREFIX COMMANDS — classic "!command" shortcuts (Discord/OwO style) for the
+// most-reached commands, in addition to the slash commands above. Needs the
+// message.created subscription (declared in aero.json). The prefix ctx gives
+// { command, args, text, invoker, nexus_id, space_id, reply }. Module gates
+// still apply so a Nexus that turns a module off gets nothing here either.
+// ─────────────────────────────────────────────────────────────
+const pOn = (ctx, key) => aero.moduleEnabled(ctx.nexus_id, key);
+// Resolve the first <@id> mention in the args to a target user id.
+const pMention = (ctx) => { const m = (ctx.text || '').match(/<@!?(\d+)>/); return m ? m[1] : null; };
+
+aero.prefix('!');
+
+aero.prefixCommand('ping', (ctx) => ctx.reply(say('🏓 Pong', 'Velixar is online and responding.', OK)));
+aero.prefixCommand('help', (ctx) => ctx.reply(helpLanding()));
+aero.prefixCommand('roll', (ctx) => ctx.reply(say('🎲 Dice', `${ctx.invoker.name} rolled a **${1 + Math.floor(Math.random() * 6)}**.`, OK)));
+aero.prefixCommand('flip', async (ctx) => { await animateFlip(ctx, '🪙 Flip', (heads, side) => say('🪙 Flip', `${heads ? '🌕' : '🌑'} **${side}**`, OK)); });
+aero.prefixCommand('coinflip', async (ctx) => { await animateFlip(ctx, '🪙 Coin flip', (heads, side) => say('🪙 Coin flip', `${heads ? '🌕' : '🌑'} ${ctx.invoker.name} flipped **${side}**!`, OK)); });
+aero.prefixCommand('8ball', (ctx) => pOn(ctx, 'fun')
+  ? ctx.reply(say('🎱 The 8-ball says', EIGHTBALL[Math.floor(Math.random() * EIGHTBALL.length)]))
+  : ctx.reply('The Fun module is off in this Nexus.'));
+
+// !rank / !level — your XP (Levels module).
+aero.prefixCommand('rank', (ctx) => {
+  if (!pOn(ctx, 'levels')) return ctx.reply('The Levels module is off in this Nexus.');
+  const target = pMention(ctx) || ctx.invoker.id;
+  const points = store.getXp(ctx.nexus_id, target);
+  const lvl = levelFor(points);
+  const p = progressBar(points);
+  return ctx.reply(rich({
+    title: `📊 ${pMention(ctx) ? 'Member' : ctx.invoker.name}`,
+    description: `${pMention(ctx) ? `<@${target}>\n\n` : ''}\`${p.bar}\`  **${p.have}/${p.need}** XP to level ${lvl + 1}`,
+    color: OK,
+    fields: [
+      { name: 'Level', value: `**${lvl}**`, inline: true },
+      { name: 'Total XP', value: `**${points.toLocaleString()}**`, inline: true },
+    ],
+    footer: 'Velixar · chat to earn XP',
+  }));
+});
+aero.prefixCommand('level', (ctx) => {
+  if (!pOn(ctx, 'levels')) return ctx.reply('The Levels module is off in this Nexus.');
+  const target = pMention(ctx) || ctx.invoker.id;
+  return ctx.reply(say('📈 Level', `<@${target}> is level **${levelFor(store.getXp(ctx.nexus_id, target))}** with **${store.getXp(ctx.nexus_id, target)}** XP.`, OK));
+});
+
+// !balance / !bal / !daily / !rich — economy shortcuts.
+aero.prefixCommand('balance', (ctx) => ecoPrefixBalance(ctx));
+aero.prefixCommand('bal', (ctx) => ecoPrefixBalance(ctx));
+function ecoPrefixBalance(ctx) {
+  if (!pOn(ctx, 'economy')) return ctx.reply('The Economy module is off in this Nexus.');
+  const c = store.getCoins(ctx.nexus_id, ctx.invoker.id);
+  return ctx.reply(rich({
+    title: '💰 Your wallet',
+    description: `You're carrying ${fmtCoins(c.balance || 0)}.`,
+    color: OK,
+    fields: [
+      { name: 'Wallet', value: fmtCoins(c.balance || 0), inline: true },
+      { name: 'Bank', value: fmtCoins(c.bank || 0), inline: true },
+      { name: 'Net worth', value: fmtCoins((c.balance || 0) + (c.bank || 0)), inline: true },
+    ],
+    footer: 'Velixar',
+  }));
+}
+aero.prefixCommand('daily', (ctx) => {
+  if (!pOn(ctx, 'economy')) return ctx.reply('The Economy module is off in this Nexus.');
+  const d = store.getDaily(ctx.nexus_id, ctx.invoker.id);
+  const now = Date.now();
+  if (now - d.last_claim < DAY) {
+    const hrs = Math.ceil((DAY - (now - d.last_claim)) / (60 * 60 * 1000));
+    return ctx.reply(say('Already claimed', `Your next daily is in **${hrs}h**.`, WARN_C));
+  }
+  const streak = now - d.last_claim < 2 * DAY ? d.streak + 1 : 1;
+  const reward = 100 + Math.min(streak, 30) * 20;
+  store.setDaily(ctx.nexus_id, ctx.invoker.id, now, streak);
+  store.addCoins(ctx.nexus_id, ctx.invoker.id, reward);
+  return ctx.reply(say('🎁 Daily coins', `+${fmtCoins(reward)} · 🔥 **${streak}-day** streak.`, OK));
+});
+aero.prefixCommand('rich', (ctx) => {
+  if (!pOn(ctx, 'economy')) return ctx.reply('The Economy module is off in this Nexus.');
+  const rows = store.topCoins(ctx.nexus_id, 10);
+  if (!rows.length) return ctx.reply(say('💰 Richest', 'No one has coins yet. Try !work!'));
+  const body = rows.map((r, n) => `${MEDALS[n] || `**${n + 1}.**`} <@${r.user_id}> · ${fmtCoins(r.balance)}`).join('\n');
+  return ctx.reply(say('💰 Richest members', body));
+});
+
+// !hug @member and friends — social actions via prefix.
+for (const [name, emoji, verb] of [['hug', '🤗', 'hug'], ['pat', '👋', 'pat'], ['kiss', '😘', 'kiss'], ['slap', '🖐️', 'slap'], ['poke', '👉', 'poke']]) {
+  aero.prefixCommand(name, (ctx) => {
+    if (!pOn(ctx, 'fun')) return ctx.reply('The Fun module is off in this Nexus.');
+    const target = pMention(ctx);
+    if (!target) return ctx.reply(`Mention someone: \`!${name} @member\`.`);
+    const gif = gifFor(name);
+    return ctx.reply({ embeds: [{ description: `${emoji} <@${ctx.invoker.id}> ${verb}s <@${target}>!`, color: BRAND, ...(gif ? { image: { url: gif } } : {}) }] });
+  });
+}
+
+// A friendly catch-all so "!something" that isn't a command nudges to !help.
+aero.prefixCommand('*', (ctx) => ctx.reply(say('Unknown command', `\`!${ctx.command}\` isn't a Velixar prefix command. Try \`!help\` or use \`/${ctx.command}\`.`, WARN_C)));
+
 // Recover after a restart: re-arm timers for giveaways that were still running.
 // (Reminders are swept by the interval above, so they need no re-arming.)
 for (const g of store.activeGiveaways()) {
