@@ -48,6 +48,40 @@ const BASE  = (process.env.BALLASTRA_URL || 'https://web.ballastra.app').trim();
 
 if (!TOKEN) { console.error('Set AERO_TOKEN.'); process.exit(1); }
 
+// Stay up. Node kills the process on an unhandled rejection, and a single
+// forgotten `await` anywhere in 160+ commands is enough to do it -- Velixar
+// would simply vanish, mid-conversation, with nothing in the log explaining
+// why. The SDK already catches throws inside a handler (it routes them to the
+// 'error' lifecycle below), so anything reaching here is a bug worth seeing
+// rather than a reason to take the whole Aero down with it.
+//
+// uncaughtException is deliberately NOT swallowed the same way: by the time it
+// fires the process may be in a genuinely broken state, so it is logged loudly
+// and the process still exits, letting a supervisor restart it clean.
+process.on('unhandledRejection', (reason) => {
+  const e = reason instanceof Error ? reason : new Error(String(reason));
+  const frames = (e.stack || '').split(/\r?\n/).slice(1, 6).join('\n');
+  console.error('[velixar] unhandled rejection:', e.message, frames ? `\n${frames}` : '');
+});
+process.on('uncaughtException', (err) => {
+  console.error('[velixar] FATAL uncaught exception:', err?.message, `\n${err?.stack || ''}`);
+  process.exit(1);
+});
+
+// Close the database cleanly on shutdown so a WAL checkpoint happens and the
+// next start does not have to recover. Both signals: SIGINT is Ctrl-C, SIGTERM
+// is what a service manager sends.
+let shuttingDown = false;
+const shutdown = (sig) => {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[velixar] ${sig} received, shutting down.`);
+  try { store.close?.(); } catch { /* already closed */ }
+  process.exit(0);
+};
+process.on('SIGINT', () => shutdown('SIGINT'));
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+
 const BRAND = '#5865F2';
 const OK = '#22C55E';
 const WARN_C = '#F59E0B';
@@ -89,7 +123,50 @@ function rich({ title, description, color = BRAND, thumbnail, image, fields, foo
 
 // Pagination: render page `p` of `items` (rendered by `renderPage`) with
 // Prev/Next buttons. State is held per message id in `pageStore`.
-const pageStore = new Map(); // messageId -> { items, perPage, title, color }
+/**
+ * A Map that survives a restart.
+ *
+ * Every live game board, open poll and paginated list used to be a plain Map,
+ * so restarting Velixar silently abandoned all of them in every Nexus at once:
+ * the buttons stayed on screen and simply stopped responding, with nothing
+ * telling the player why. The fix has to be invisible at the call sites --
+ * there are dozens of `.get()`/`.set()`/`.delete()` across 160+ commands --
+ * so this extends Map and writes through on each mutation.
+ *
+ * Sets do not survive JSON. `revive` is handed the parsed blob on load and
+ * returns the real shape, so a caller holding Sets (poll voters, trivia
+ * answerers) declares that once instead of at every read.
+ */
+class PersistedMap extends Map {
+  constructor(kind, { revive } = {}) {
+    super();
+    this.kind = kind;
+    for (const [k, v] of store.sessionLoadAll(kind)) {
+      try { super.set(k, revive ? revive(v) : v); } catch { /* skip a corrupt row */ }
+    }
+  }
+  set(key, value) {
+    store.sessionSave(this.kind, key, value);
+    return super.set(key, value);
+  }
+  delete(key) {
+    store.sessionDelete(this.kind, key);
+    return super.delete(key);
+  }
+  /** Re-save after mutating a value in place (s.page++ and friends). */
+  touch(key) {
+    if (super.has(key)) store.sessionSave(this.kind, key, super.get(key));
+  }
+}
+
+// Sets are written as arrays; rebuild them on the way back in.
+const reviveSets = (...fields) => (v) => {
+  if (!v || typeof v !== 'object') return v;
+  for (const f of fields) if (Array.isArray(v[f])) v[f] = new Set(v[f]);
+  return v;
+};
+
+const pageStore = new PersistedMap('page'); // messageId -> { items, perPage, title, color }
 function pageView(state, p) {
   const total = Math.ceil(state.items.length / state.perPage) || 1;
   const page = Math.max(0, Math.min(p, total - 1));
@@ -112,6 +189,7 @@ function handlePage(i, dir) {
   const s = pageStore.get(String(i.message_id));
   if (!s) return i.replyEphemeral('This list is no longer active.');
   s.page = dir === 'next' ? s.page + 1 : s.page - 1;
+  pageStore.touch(String(i.message_id));
   return i.update(pageView(s, s.page));
 }
 
@@ -145,6 +223,34 @@ const lastGain = new Map();    // `${nexus}:${user}` -> ts
 const manifest = await loadManifest('./aero.json').catch(() => null);
 
 const aero = await createAero({ token: TOKEN, baseUrl: BASE, manifest: manifest ?? undefined });
+
+// Tell the USER when a handler throws.
+//
+// The SDK catches throws inside a handler and routes them to the 'error'
+// lifecycle, which keeps the Aero alive -- but it hands that hook only the
+// error, not the interaction, so there is no way to answer the person who ran
+// the command. From their side nothing happens at all: they press a button,
+// Velixar stays silent, and they press it again.
+//
+// Wrapping the two registrars keeps the interaction in scope, so a failure can
+// say so privately and still be logged with the command name attached (the
+// bare lifecycle error does not say WHICH command produced it).
+const wrapHandler = (label, fn) => async (i) => {
+  try {
+    return await fn(i);
+  } catch (e) {
+    console.error(`[velixar] ${label} failed:`, e?.message || e);
+    // Best-effort: the reply itself can fail (the space was deleted, the
+    // interaction already answered), and that must not re-throw into the
+    // SDK's own catch and log the same failure twice.
+    try { await i.replyEphemeral?.(say('Something went wrong', 'That did not work. Try again in a moment.', DANGER_C)); } catch { /* nothing more to do */ }
+    return undefined;
+  }
+};
+const rawCommand = aero.command.bind(aero);
+const rawComponent = aero.component.bind(aero);
+aero.command = (name, fn) => rawCommand(name, wrapHandler(`/${name}`, fn));
+aero.component = (id, fn) => rawComponent(id, wrapHandler(`component ${id}`, fn));
 console.log(`[velixar] connected as "${aero.aero.name}" in ${aero.installations.length} Nexus(es).`);
 
 // Helper: is a module on for the Nexus this event/interaction came from?
@@ -161,6 +267,23 @@ function inlineText(i, inline, modal) {
 
 aero.onModuleToggled((m) => console.log(`[velixar] module ${m.module_key} -> ${m.enabled ? 'on' : 'off'}`));
 aero.onLifecycle('error', (e) => console.error('[velixar] error:', e?.message || e));
+
+// Connection visibility. The SDK reconnects on its own (socket.io with
+// backoff), so there is nothing to retry here -- but without these lines a
+// drop is completely silent, and "Velixar stopped responding for ten minutes"
+// becomes unanswerable after the fact. Log both edges and how long the gap
+// was, so a report can be matched against a real outage.
+let downSince = null;
+aero.onLifecycle('disconnect', (reason) => {
+  downSince = Date.now();
+  console.warn(`[velixar] disconnected (${reason || 'unknown'}). The SDK will retry.`);
+});
+aero.onLifecycle('ready', () => {
+  if (downSince) {
+    console.log(`[velixar] reconnected after ${Math.round((Date.now() - downSince) / 1000)}s.`);
+    downSince = null;
+  }
+});
 
 // ─────────────────────────────────────────────────────────────
 // WELCOME module
@@ -627,7 +750,7 @@ aero.command('givexp', (i) => {
   const target = i.options?.user;
   const amount = (i.options?.text ?? '').toString().trim();
   if (target && amount) return doGiveXp(i, target, amount);
-  return i.reply({
+  return i.replyEphemeral({
     embeds: [{ title: 'Give XP', description: 'Pick the member to award XP to. (tip: `/givexp @name 250`)', color: BRAND }],
     components: [{ components: [{ type: 'select', kind: 'member', custom_id: 'xp:give', placeholder: 'Pick a member', min: 1, max: 1 }] }],
   });
@@ -665,7 +788,7 @@ aero.component('xp:levelrole-num', (i) => {
   const level = parseInt((i.fields?.level || '').trim(), 10);
   if (!Number.isFinite(level) || level < 1) return i.replyEphemeral('Enter a level of 1 or higher.');
   pendingLevelNum.set(`${i.nexus_id}:${i.invoker.id}`, level);
-  return i.reply({
+  return i.replyEphemeral({
     embeds: [{ title: `Reward for level ${level}`, description: 'Pick the role members get at this level.', color: BRAND }],
     components: [{ components: [{ type: 'select', kind: 'role', custom_id: 'xp:levelrole-pick', placeholder: 'Pick a role', min: 1, max: 1 }] }],
   });
@@ -705,7 +828,7 @@ aero.command('poll', (i) => {
     ] }],
   });
 });
-const pollVotes = new Map(); // messageId -> { yes:Set, no:Set }
+const pollVotes = new PersistedMap('poll', { revive: reviveSets('yes', 'no') }); // messageId -> { yes:Set, no:Set }
 // A 12-cell bar with the percentage, so the tally reads at a glance.
 function pollBar(part, total) {
   const pct = total ? Math.round((part / total) * 100) : 0;
@@ -1155,7 +1278,7 @@ const TRIVIA = [
   { q: 'How many sides does a hexagon have?', a: ['5', '6', '7', '8'], correct: 1 },
   { q: 'What is the smallest prime number?', a: ['0', '1', '2', '3'], correct: 2 },
 ];
-const triviaState = new Map(); // messageId -> { correct, answered:Set }
+const triviaState = new PersistedMap('trivia', { revive: reviveSets('answered') }); // messageId -> { correct, answered:Set }
 aero.command('trivia', async (i) => {
   if (!gameGate(i)) return i.replyEphemeral('The Games module is off in this Nexus.');
   const t = TRIVIA[Math.floor(Math.random() * TRIVIA.length)];
@@ -1171,6 +1294,7 @@ function handleTrivia(i) {
   if (!st) return i.replyEphemeral('This trivia round has ended.');
   if (st.answered.has(i.invoker.id)) return i.replyEphemeral('You already answered this one.');
   st.answered.add(i.invoker.id);
+  triviaState.touch(String(i.message_id));
   const chose = parseInt(i.custom_id.split(':')[1], 10);
   if (chose === st.correct) {
     triviaState.delete(String(i.message_id));
@@ -1181,7 +1305,7 @@ function handleTrivia(i) {
 }
 
 // /tictactoe — challenge a member; take turns tapping the 3x3 grid.
-const tttState = new Map(); // messageId -> { board:[9], turn, players:[x,o], done }
+const tttState = new PersistedMap('ttt'); // messageId -> { board:[9], turn, players:[x,o], done }
 aero.command('tictactoe', (i) => {
   if (!gameGate(i)) return i.replyEphemeral('The Games module is off in this Nexus.');
   const opponent = i.options?.user;
@@ -1230,6 +1354,7 @@ function handleTtt(i) {
   if (win) s.done = { winner: s.players[s.turn], mark: s.turn };
   else if (s.board.every((c) => c !== null)) s.done = 'draw';
   else s.turn = s.turn === 0 ? 1 : 0;
+  if (s.done) tttState.delete(String(i.message_id)); else tttState.touch(String(i.message_id));
   return i.update(tttView(s));
 }
 
@@ -1237,7 +1362,7 @@ function handleTtt(i) {
 // paginated a..m / n..z). Anyone in the space can guess.
 const HANGMAN_WORDS = ['ballastra', 'nexus', 'velixar', 'gaming', 'community', 'moderator', 'javascript', 'keyboard', 'pineapple', 'adventure'];
 const HANG_STAGES = ['😀', '🙂', '😐', '😟', '😧', '😵', '💀'];
-const hangState = new Map(); // messageId -> { word, guessed:Set, wrong, page }
+const hangState = new PersistedMap('hang', { revive: reviveSets('guessed') }); // messageId -> { word, guessed:Set, wrong, page }
 aero.command('hangman', async (i) => {
   if (!gameGate(i)) return i.replyEphemeral('The Games module is off in this Nexus.');
   const word = HANGMAN_WORDS[Math.floor(Math.random() * HANGMAN_WORDS.length)];
@@ -1266,10 +1391,11 @@ function handleHangman(i) {
   const s = hangState.get(String(i.message_id));
   if (!s) return i.replyEphemeral('This game has ended.');
   const key = i.custom_id.split(':')[1];
-  if (key === 'page') { s.page = s.page === 0 ? 1 : 0; return i.update(hangView(s)); }
+  if (key === 'page') { s.page = s.page === 0 ? 1 : 0; hangState.touch(String(i.message_id)); return i.update(hangView(s)); }
   if (s.guessed.has(key)) return i.replyEphemeral('Already guessed that letter.');
   s.guessed.add(key);
   if (!s.word.includes(key)) s.wrong++;
+  hangState.touch(String(i.message_id));
   const won = [...s.word].every((c) => s.guessed.has(c));
   const lost = s.wrong >= HANG_STAGES.length - 1;
   if ((won || lost)) { if (won && on(i.nexus_id, 'levels')) store.addXp(i.nexus_id, i.invoker.id, 20); hangState.delete(String(i.message_id)); }
@@ -1334,7 +1460,7 @@ function handleC4(i) {
 
 // /guess-flag style: /guessword shows a scrambled word to unscramble via a modal.
 const scrambleWords = ['galaxy', 'wizard', 'planet', 'rocket', 'castle', 'dragon', 'jungle', 'python'];
-const scrambleState = new Map(); // messageId -> answer
+const scrambleState = new PersistedMap('scramble'); // messageId -> answer
 aero.command('unscramble', async (i) => {
   if (!gameGate(i)) return i.replyEphemeral('The Games module is off in this Nexus.');
   const w = scrambleWords[Math.floor(Math.random() * scrambleWords.length)];
@@ -1405,7 +1531,7 @@ aero.component('gn:submit', (i) => {
 });
 
 // /higherlower — is the next number higher or lower? Streak-based.
-const hlState = new Map(); // messageId -> { current, streak }
+const hlState = new PersistedMap('hl'); // messageId -> { current, streak }
 aero.command('higherlower', async (i) => {
   if (!gameGate(i)) return i.replyEphemeral('The Games module is off in this Nexus.');
   const current = 1 + Math.floor(Math.random() * 100);
@@ -1433,6 +1559,7 @@ function handleHL(i) {
     return i.update(say('💥 Wrong', `It was **${next}**. Final streak: **${s.streak}**.`, DANGER_C));
   }
   s.current = next; s.streak++;
+  hlState.touch(String(i.message_id));
   if (s.streak % 5 === 0) awardXp(i, 10);
   return i.update(hlView(next, s.streak));
 }
@@ -1956,7 +2083,7 @@ aero.command('lottery', (i) => {
 });
 
 // /blackjack — a simplified hit/stand game vs the dealer, wagering coins.
-const bjState = new Map(); // messageId -> { bet, player:[], dealer:[], done }
+const bjState = new PersistedMap('bj'); // messageId -> { bet, player:[], dealer:[], done }
 const bjDraw = () => 1 + Math.floor(Math.random() * 13);
 const bjVal = (cards) => { let sum = cards.reduce((a, c) => a + Math.min(c, 10), 0); let aces = cards.filter((c) => c === 1).length; while (aces > 0 && sum + 10 <= 21) { sum += 10; aces--; } return sum; };
 // Numeric 1..13 -> a card face on a suit picked by position, so a hand reads
@@ -2017,7 +2144,7 @@ function handleBj(i, action) {
     else if (pv < dv) { s.done = `Dealer wins. You lost ${fmtCoins(s.bet)}.`; store.addCoins(i.nexus_id, i.invoker.id, -s.bet); }
     else s.done = 'Push (tie). Your bet is returned.';
   }
-  if (s.done) bjState.delete(String(i.message_id));
+  if (s.done) bjState.delete(String(i.message_id)); else bjState.touch(String(i.message_id));
   return i.update(bjView(s));
 }
 
@@ -2318,7 +2445,7 @@ aero.component('roles:pick', async (i) => {
 const modState = new Map(); // `${user}` -> pending action target
 
 // Picks a member inline (`/warn @name`) or via a picker. `pick` is the reply UI.
-const memberPickReply = (i, title, prompt, customId) => i.reply({
+const memberPickReply = (i, title, prompt, customId) => i.replyEphemeral({
   embeds: [{ title, description: `${prompt} (tip: \`/${customId.split(':')[1]} @name\`)`, color: BRAND }],
   components: [{ components: [{ type: 'select', kind: 'member', custom_id: customId, placeholder: 'Pick a member', min: 1, max: 1 }] }],
 });
@@ -2396,7 +2523,7 @@ aero.command('tempmute', (i) => {
   const target = i.options?.user;
   const mins = (i.options?.text ?? '').toString().trim();
   if (target && mins) return doTempmute(i, target, mins);
-  return i.reply({
+  return i.replyEphemeral({
     embeds: [{ title: 'Temp timeout', description: 'Pick the member to time out. (tip: `/tempmute @name 30`)', color: BRAND }],
     components: [{ components: [{ type: 'select', kind: 'member', custom_id: 'mod:tempmute', placeholder: 'Pick a member', min: 1, max: 1 }] }],
   });
@@ -2450,7 +2577,7 @@ function memberActionCommand(name, { title, prompt, run, logTitle, logColor }) {
     // Inline: `/kick @member` runs straight away. No mention → show a picker.
     const target = i.options?.user;
     if (target) return act(i, target, (m) => i.reply(m));
-    return i.reply({
+    return i.replyEphemeral({
       embeds: [{ title, description: `${prompt} (tip: type \`/${name} @name\`)`, color: BRAND }],
       components: [{ components: [{ type: 'select', kind: 'member', custom_id: `mod:${name}`, placeholder: 'Pick a member', min: 1, max: 1 }] }],
     });
@@ -2492,7 +2619,7 @@ aero.command('warnlist', (i) => {
   if (!modGate(i)) return i.replyEphemeral('The Moderation module is off in this Nexus.');
   const target = i.options?.user;
   if (target) return doWarnlist(i, target, (m) => i.reply(m));
-  return i.reply({
+  return i.replyEphemeral({
     embeds: [{ title: '🧾 Warnings', description: 'Pick a member to view their warnings. (tip: `/warnlist @name`)', color: BRAND }],
     components: [{ components: [{ type: 'select', kind: 'member', custom_id: 'mod:warnlist', placeholder: 'Pick a member', min: 1, max: 1 }] }],
   });
@@ -2543,7 +2670,7 @@ aero.command('notes', (i) => {
   if (!modGate(i)) return i.replyEphemeral('The Moderation module is off in this Nexus.');
   const target = i.options?.user;
   if (target) return doNotes(i, target, (m) => i.replyEphemeral(m));
-  return i.reply({
+  return i.replyEphemeral({
     embeds: [{ title: '📝 Notes', description: 'Pick a member to read their staff notes. (tip: `/notes @name`)', color: BRAND }],
     components: [{ components: [{ type: 'select', kind: 'member', custom_id: 'mod:notes', placeholder: 'Pick a member', min: 1, max: 1 }] }],
   });
@@ -2650,7 +2777,7 @@ function roleOpCommand(name, op, verb, logTitle) {
       pendingRoleOp.set(`${i.nexus_id}:${i.invoker.id}:${op}`, target);
       return roleOpPickRole(i, op, (m) => i.reply(m));
     }
-    return i.reply({
+    return i.replyEphemeral({
       embeds: [{ title: verb, description: `Pick the member to ${op === 'give' ? 'give a role to' : 'take a role from'}. (tip: \`/${name} @name\`)`, color: BRAND }],
       components: [{ components: [{ type: 'select', kind: 'member', custom_id: `roleop:${op}:member`, placeholder: 'Pick a member', min: 1, max: 1 }] }],
     });
@@ -2743,7 +2870,7 @@ function handleRemindCancel(i) {
 // SUGGESTIONS module — /suggest posts to a configured space with
 // up/down vote buttons and a live tally. /suggest-setup picks the space.
 // ─────────────────────────────────────────────────────────────
-const suggestVotes = new Map(); // messageId -> { up:Set, down:Set }
+const suggestVotes = new PersistedMap('suggest', { revive: reviveSets('up', 'down') }); // messageId -> { up:Set, down:Set }
 aero.command('suggest', (i) => {
   if (!on(i.nexus_id, 'suggestions')) return i.replyEphemeral('The Suggestions module is off in this Nexus.');
   if (!cfg(i.nexus_id).suggestions_space) return i.replyEphemeral('No suggestions space set. An admin can set one with /suggest-setup.');
@@ -3011,7 +3138,7 @@ aero.component('setup:ticket', (i) => {
 });
 
 // /ticket-staff — pick the staff role added + pinged in each ticket.
-aero.command('ticket-staff', (i) => i.reply({
+aero.command('ticket-staff', (i) => i.replyEphemeral({
   embeds: [{ title: 'Ticket staff role', description: 'Pick the role to ping in new tickets.', color: BRAND }],
   components: [{ components: [{ type: 'select', kind: 'role', custom_id: 'setup:ticketstaff', placeholder: 'Pick a role', min: 1, max: 1 }] }],
 }));
@@ -3021,7 +3148,7 @@ aero.component('setup:ticketstaff', (i) => {
 });
 
 // /welcome-setup — pick the space to greet new members in.
-aero.command('welcome-setup', (i) => i.reply({
+aero.command('welcome-setup', (i) => i.replyEphemeral({
   embeds: [{ title: 'Welcome space', description: 'Pick the space where new members are greeted.', color: BRAND }],
   components: [{ components: [{ type: 'select', kind: 'space', custom_id: 'setup:welcome', placeholder: 'Pick a space', min: 1, max: 1 }] }],
 }));
@@ -3031,7 +3158,7 @@ aero.component('setup:welcome', (i) => {
 });
 
 // /suggest-setup — pick the space where /suggest posts land.
-aero.command('suggest-setup', (i) => i.reply({
+aero.command('suggest-setup', (i) => i.replyEphemeral({
   embeds: [{ title: 'Suggestions space', description: 'Pick the space where suggestions are posted.', color: BRAND }],
   components: [{ components: [{ type: 'select', kind: 'space', custom_id: 'setup:suggest', placeholder: 'Pick a space', min: 1, max: 1 }] }],
 }));
@@ -3044,7 +3171,7 @@ aero.component('setup:suggest', (i) => {
 // LOGGING module — /modlog-setup picks the audit space. Mod actions,
 // joins and leaves are then recorded there via modlog() above.
 // ─────────────────────────────────────────────────────────────
-aero.command('modlog-setup', (i) => i.reply({
+aero.command('modlog-setup', (i) => i.replyEphemeral({
   embeds: [{ title: 'Mod-log space', description: 'Pick the space where moderation + join/leave logs are posted.', color: BRAND }],
   components: [{ components: [{ type: 'select', kind: 'space', custom_id: 'setup:modlog', placeholder: 'Pick a space', min: 1, max: 1 }] }],
 }));
@@ -3134,7 +3261,7 @@ aero.command('rr-add', (i) => {
 });
 aero.component('rr:label', (i) => {
   pendingRR.set(`${i.nexus_id}:${i.invoker.id}`, { label: (i.fields?.label || 'Role').trim().slice(0, 40), emoji: (i.fields?.emoji || '').trim().slice(0, 8) });
-  return i.reply({
+  return i.replyEphemeral({
     embeds: [{ title: 'Pick the role', description: 'Choose the role this button grants.', color: BRAND }],
     components: [{ components: [{ type: 'select', kind: 'role', custom_id: 'rr:pick', placeholder: 'Pick a role', min: 1, max: 1 }] }],
   });
@@ -3347,7 +3474,7 @@ aero.command('roles-add', (i) => aero.openModal(i.nexus_id, i.invoker.id, {
 }, { spaceId: i.space_id }));
 aero.component('setup:rolelabel', (i) => {
   pendingRoleLabel.set(`${i.nexus_id}:${i.invoker.id}`, (i.fields?.label || '').trim().slice(0, 40) || 'Role');
-  return i.reply({
+  return i.replyEphemeral({
     embeds: [{ title: 'Pick the role', description: 'Choose which role this menu option assigns.', color: BRAND }],
     components: [{ components: [{ type: 'select', kind: 'role', custom_id: 'setup:rolepick', placeholder: 'Pick a role', min: 1, max: 1 }] }],
   });
@@ -3633,7 +3760,7 @@ aero.command('poll-multi', (i) => {
 });
 // Poll state keyed by the posted message id, so every voter's press re-renders
 // the same tally. Held in memory (a poll is short-lived).
-const multiPolls = new Map(); // messageId -> { question, options:[], votes: Map<user,idx> }
+const multiPolls = new PersistedMap('multipoll', { revive: (v) => (v && Array.isArray(v.votes) ? { ...v, votes: new Map(v.votes) } : v) }); // messageId -> { question, options:[], votes: Map<user,idx> }
 aero.component('poll:multi', async (i) => {
   const question = (i.fields?.question || '').trim();
   const options = (i.fields?.options || '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 5);
@@ -3662,6 +3789,7 @@ function handleMultiVote(i) {
   if (!poll) return i.replyEphemeral('This poll is no longer active.');
   const idx = parseInt(i.custom_id.split(':')[1], 10);
   poll.votes.set(i.invoker.id, idx);
+  multiPolls.touch(String(i.message_id));
   return i.update(multiPollView(poll.question, poll.options, poll.votes));
 }
 
@@ -3908,6 +4036,7 @@ async function dispatchPrefix(ev) {
   const m = ev?.data?.message;
   const text = m?.text ?? m?.content ?? '';
   const px = prefixOf(ev.nexus_id);
+  console.log('[DIAG-PFX] text=' + JSON.stringify(text).slice(0, 30) + ' px=' + JSON.stringify(px) + ' starts=' + (typeof text === 'string' && text.startsWith(px)) + ' is_aero=' + !!m?.is_aero + ' handlers=' + (aero._prefixHandlers?.size ?? 0));
   if (!text || m?.is_aero) return;
   if (!text.startsWith(px)) return;
   const rest = text.slice(px.length).trim();
@@ -3916,6 +4045,7 @@ async function dispatchPrefix(ev) {
   const command = parts[0].toLowerCase();
   const args = parts.slice(1);
   const fn = aero._prefixHandlers?.get(command) || aero._prefixHandlers?.get('*');
+  console.log('[DIAG-PFX2] command=' + JSON.stringify(command) + ' matched=' + !!fn + ' space=' + JSON.stringify(m.space_id));
   if (!fn) return;
   const runner = { id: m.sender_id, name: m.sender_name };
   const ctx = {
@@ -3923,7 +4053,7 @@ async function dispatchPrefix(ev) {
     space_id: m.space_id, nexus_id: ev.nexus_id,
     sender_id: m.sender_id, sender_name: m.sender_name,
     invoker: runner, author: runner, message_id: m.id,
-    reply: (message) => aero.sendMessage(ev.nexus_id, m.space_id, message),
+    reply: (message) => { console.log('[DIAG-PFX3] reply called'); return aero.sendMessage(ev.nexus_id, m.space_id, message).then((r) => { console.log('[DIAG-PFX3] reply sent ok'); return r; }).catch((e) => { console.error('[DIAG-PFX3] reply FAILED:', e.message); throw e; }); },
     replyEphemeral: (message) => {
       const body = typeof message === 'string' ? { text: message } : (message || {});
       return aero.respondInteraction(ev.nexus_id, { ...body, mode: 'ephemeral', target_user_id: m.sender_id, space_id: m.space_id });
@@ -3950,6 +4080,17 @@ aero.command('prefix', (i) => {
 for (const g of store.activeGiveaways()) {
   scheduleGiveaway(g.message_id, g.ends_at - Date.now());
 }
+// Abandoned games are never deleted by the normal path (nobody presses the
+// last button), so without a sweep the sessions table grows forever. 24h is
+// long enough that a restart never interrupts live play and short enough that
+// a board from last week is not worth restoring.
+const sweepSessions = () => {
+  const n = store.sessionSweep();
+  if (n) console.log(`[velixar] swept ${n} stale session(s).`);
+};
+sweepSessions();
+setInterval(sweepSessions, 60 * 60 * 1000).unref?.();
+
 const pendingReminders = store.allReminders().length;
 if (pendingReminders) console.log(`[velixar] ${pendingReminders} reminder(s) pending.`);
 

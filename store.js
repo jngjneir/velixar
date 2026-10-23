@@ -125,6 +125,23 @@ db.exec(`
     author   TEXT,
     created  INTEGER NOT NULL
   );
+  -- Live interactive state: an in-progress game board, an open poll's votes,
+  -- a paginated list. All of it used to live in plain Maps, so restarting
+  -- Velixar silently abandoned every game and poll in every Nexus -- the
+  -- buttons stayed on screen and simply stopped responding, with nothing
+  -- telling the player why.
+  --
+  -- One generic table rather than one per game: the shapes differ, the
+  -- lifecycle does not. The kind column namespaces them, key is whatever the
+  -- Map was keyed by (usually a message id), and data is the JSON blob.
+  CREATE TABLE IF NOT EXISTS sessions (
+    kind       TEXT NOT NULL,
+    key        TEXT NOT NULL,
+    data       TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (kind, key)
+  );
+  CREATE INDEX IF NOT EXISTS sessions_age_idx ON sessions (updated_at);
   CREATE TABLE IF NOT EXISTS eco_cooldowns (
     nexus_id TEXT NOT NULL,
     user_id  TEXT NOT NULL,
@@ -413,4 +430,68 @@ export function clearNotes(nexusId, userId) { return clearNotesStmt.run(nexusId,
 
 function safeParse(s, fallback) {
   try { const v = JSON.parse(s); return v ?? fallback; } catch { return fallback; }
+}
+
+// ── Live session state (games, polls, paginated lists) ──
+//
+// A thin persistence layer behind what used to be plain Maps. Sets do not
+// survive JSON, so callers that stored a Set (poll voters, trivia answerers)
+// serialise it as an array and rebuild it on load -- sessionLoadAll below
+// hands back exactly what was written, nothing clever.
+
+const sessionSet = db.prepare(`
+  INSERT INTO sessions (kind, key, data, updated_at) VALUES (?, ?, ?, ?)
+  ON CONFLICT (kind, key) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at
+`);
+const sessionDelStmt = db.prepare('DELETE FROM sessions WHERE kind = ? AND key = ?');
+const sessionAllStmt = db.prepare('SELECT key, data FROM sessions WHERE kind = ?');
+const sessionSweepStmt = db.prepare('DELETE FROM sessions WHERE updated_at < ?');
+
+/** Write (or overwrite) one session row. `value` must be JSON-serialisable. */
+export function sessionSave(kind, key, value) {
+  try {
+    // JSON.stringify turns a Set into {} with no warning, which would persist
+    // an empty poll every single time. Convert on the way out; PersistedMap's
+    // `revive` turns the arrays back into Sets on the way in.
+    const json = JSON.stringify(value, (_k, v) => (v instanceof Set || v instanceof Map ? [...v] : v));
+    sessionSet.run(kind, String(key), json, Date.now());
+  } catch { /* a non-serialisable value is a caller bug; never break the game over it */ }
+}
+
+export function sessionDelete(kind, key) {
+  try { sessionDelStmt.run(kind, String(key)); } catch { /* already gone */ }
+}
+
+/** Every row for a kind, as [key, parsedValue] pairs. Used to rehydrate a Map. */
+export function sessionLoadAll(kind) {
+  try {
+    return sessionAllStmt.all(kind)
+      .map((r) => { try { return [r.key, JSON.parse(r.data)]; } catch { return null; } })
+      .filter(Boolean);
+  } catch { return []; }
+}
+
+/**
+ * Drop sessions older than `maxAgeMs`.
+ *
+ * Without this the table grows forever: a game nobody finished is never
+ * deleted by the normal path, and an abandoned board from months ago is not
+ * worth restoring. Default 24h -- long enough that a restart never loses live
+ * play, short enough that the table stays small.
+ */
+export function sessionSweep(maxAgeMs = 24 * 60 * 60 * 1000) {
+  try { return sessionSweepStmt.run(Date.now() - maxAgeMs).changes; } catch { return 0; }
+}
+
+/**
+ * Close the database cleanly.
+ *
+ * better-sqlite3 in WAL mode leaves the write-ahead log for the next opener to
+ * replay. That is safe, but an explicit close checkpoints it, so a restart
+ * starts from a settled file instead of recovering one -- and on Windows it
+ * releases the -wal/-shm handles rather than leaving them locked.
+ */
+export function close() {
+  try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* nothing to checkpoint */ }
+  db.close();
 }
