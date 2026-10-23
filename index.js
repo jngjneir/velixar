@@ -3095,13 +3095,32 @@ aero.component('ticket:close', async (i) => {
   const spaceId = i.space_id;
   const owner = store.ticketOwnerOf(spaceId);
   try {
-    await aero.sendMessage(i.nexus_id, spaceId, say('Ticket closed', `Closed by ${i.invoker.name}. This space is now locked.`, '#EF4444')).catch(() => {});
+    await aero.sendMessage(i.nexus_id, spaceId, say('Ticket closed', 'Closed by ' + i.invoker.name + '. This space will be deleted in 5 seconds.', '#EF4444')).catch(() => {});
     await aero.setLockdown(i.nexus_id, spaceId, true).catch(() => {});
     if (owner) {
       store.clearTicket(owner.nexus_id, owner.user_id);
       await aero.removeSpaceMember(i.nexus_id, spaceId, owner.user_id).catch(() => {});
     }
-    return i.replyEphemeral('✅ Ticket closed.');
+
+    // Delete the space rather than leaving a locked husk in the sidebar, which
+    // is what every closed ticket used to become. The 5s gap is so the closing
+    // message is actually readable before the space disappears.
+    //
+    // Fire-and-forget: the reply must not wait 5 seconds, and a failed delete
+    // (space already gone, grant revoked, old server without the route) must
+    // not break closing the ticket -- the lock and member removal above have
+    // already done the important part.
+    //
+    // unref so a pending delete never holds the process open at shutdown.
+    setTimeout(() => {
+      // Promise.resolve wraps the optional call: on an SDK without deleteSpace
+      // the ?. yields undefined, and .catch on undefined would throw inside the
+      // timer, where nothing can catch it.
+      Promise.resolve(aero.deleteSpace?.(i.nexus_id, spaceId))
+        .catch((e) => console.error('[velixar] ticket space delete failed:', e?.message || e));
+    }, 5000).unref?.();
+
+    return i.replyEphemeral('✅ Ticket closed. The space will be deleted in 5 seconds.');
   } catch (e) { return i.replyEphemeral(`❌ Could not close: ${e.message}`); }
 });
 
